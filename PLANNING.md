@@ -3,9 +3,9 @@
 
 > **Status**: v0.2 — Checkpoint Approved, siap scaffold Phase 0
 > **Tanggal**: 2026-04-21
-> **Penanggung jawab**: Mas Rahmat (lead) + G.I.N.G (co-architect)
+> **Maintainer**: Rahmat Kurnia (project lead)
 > **Codename**: **N.E.X.U.S** — **N**etworked **E**nsemble for e**X**tensible **U**ser-agent **S**essions
-> **License**: Proprietary — © Rahmat Kurnia (interim, personal project)
+> **License**: [MIT](LICENSE) — © Rahmat Kurnia
 
 ---
 
@@ -37,9 +37,9 @@
 | ADR-007 | **MCP (Model Context Protocol)** untuk tool layer | Sudah standar; Claude Code native; mudah tambah tool baru tanpa ubah runtime. |
 | ADR-008 | **Fresh memory isolation** | TIDAK menyentuh memory server / knowledge graph milik tooling lain di host. Nexus memory tersimpan di Postgres container milik Nexus sendiri. |
 | ADR-009 | **Skill registry** — integrasi OpenSpace ditunda ke Phase 8 | Phase awal fokus ke memory + routing. Skill integration menambah kompleksitas yang belum perlu. |
-| ADR-010 | **CLI agent v1 hanya `claude` + `hermes`** | Mas prefer start minimal. `cursor-agent` dan `gemini` akan ditambah di Phase 5 (Multi-Agent Expansion) setelah pola adapter stabil. |
+| ADR-010 | **CLI agent v1 hanya `claude` + `hermes`** | Start minimal. `cursor-agent` dan `gemini` ditambah di Phase 5 (Multi-Agent Expansion) setelah pola adapter stabil. |
 | ADR-011 | **Workspace path via env var** (`NEXUS_WORKSPACE_ROOT`) | Wajib di-set absolute path di `.env`; tidak ada default fallback. Composer fail-fast kalau env kosong. |
-| ADR-012 | **License interim: proprietary, © Rahmat Kurnia (personal)** | Repo personal Mas Rahmat. Keputusan license final (MIT/Apache vs tetap proprietary) ditunda sampai siap rilis publik. |
+| ADR-012 | **License: MIT** | Public release; permissive license selected for maximum compatibility. © Rahmat Kurnia. |
 
 ---
 
@@ -57,14 +57,14 @@
 - CLI agent runtime pool v1: **`claude` + `hermes`** (adapter pattern siap untuk extend ke `cursor-agent`, `gemini`, dll di Phase 5).
 - Tool layer: MCP server registry, per-room tool whitelist.
 - ACL dasar: user tidak bisa akses DM user lain via bot; memory DM tidak leak ke room.
-- Deploy: `docker compose up` di PC Mas.
+- Deploy: `docker compose up` di host (laptop dev / homelab / VPS).
 
 ### Non-Goals v1 (eksplisit dikeluarkan)
 
 - Mobile native app (pakai Rocket.Chat mobile existing kalau butuh).
 - Voice/video call.
 - End-to-end encryption antar user (relying on Rocket.Chat default TLS).
-- Multi-tenant SaaS (v1 single-tenant, tim Mas sendiri).
+- Multi-tenant SaaS (v1 single-tenant, one team per Nexus instance).
 - Fine-grained billing / cost tracking per-user.
 - Agent-to-agent orchestration otomatis (pakai ClawTeam existing kalau butuh orchestrasi agent paralel).
 - Production hardening (backup, DR, HA) — akan jadi Phase 10+ saat move ke server.
@@ -617,13 +617,13 @@ Service host connect ke container via `localhost:<port>` (semua port container d
 
 ### 8.2.1 Port Allocation — Verified Clean (2026-04-21)
 
-Port yang dialokasikan untuk N.E.X.U.S, sudah dicek tidak bentrok dengan service existing di PC Mas (benchmach-ui pakai 3003, benchmach stack pakai 7789/8082/8030/8025):
+Port yang dialokasikan untuk N.E.X.U.S, dipilih supaya tidak bentrok dengan service common lain di host (mis. Postgres 5432 lokal, Redis 6379 lokal):
 
 | Service | Host port | Container port | Keterangan |
 |---|---|---|---|
 | Rocket.Chat | **3000** | 3000 | UI utama |
 | MongoDB | **27017** | 27017 | internal Rocket.Chat |
-| Postgres + pgvector | **5433** | 5432 | **5433 di host** untuk menghindari konflik potensial saat Mas pasang pg lokal lain di masa depan |
+| Postgres + pgvector | **5433** | 5432 | **5433 di host** untuk menghindari konflik dengan instalasi Postgres lokal |
 | Redis | **6380** | 6379 | **6380 di host**, alasan serupa |
 | nexus-gateway | **4000** | — | host process (Bun) |
 | nexus-composer | **4001** | — | host process (Bun) |
@@ -801,21 +801,21 @@ Tiap milestone punya **acceptance criteria** yang bisa dicek.
 
 ## 11. Langkah Selanjutnya (Immediate)
 
-Setelah plan ini di-approve Mas Rahmat, urutan eksekusi:
+Phase 0 scaffolding (sudah selesai per checkpoint 2026-04-21):
 
-1. **Aku scaffold repo**:
+1. **Repo scaffold**:
    - `package.json` workspaces + `bunfig.toml`
    - `docker-compose.yml` final untuk Phase 0
-   - `services/gateway`, `services/composer`, `services/runtime`, `services/mem0-api` skeleton (file minimal bisa di-run)
+   - `services/gateway`, `services/composer`, `services/runtime`, `services/mem0-api` skeleton
    - `db/migrations/0001_init.sql` dari §5.1
    - `Makefile` + `.env.example`
    - `README.md` dengan quick start
 
-2. **Mas Rahmat verifikasi `make up` jalan** di PC.
+2. **Verify `make up` works** on the host machine.
 
-3. **Aku lanjut Phase 1** (Gateway Ingest + Echo Bot) sampai acceptance.
+3. **Phase 1** (Gateway Ingest + Echo Bot) — done.
 
-4. **Ngobrol lagi** per milestone untuk sign-off sebelum lanjut.
+4. **Per-milestone sign-off** continues for remaining phases.
 
 ### Checkpoint — Approved 2026-04-21
 
@@ -823,7 +823,7 @@ Setelah plan ini di-approve Mas Rahmat, urutan eksekusi:
 - [x] **Port allocation**: verified clean, final mapping di §8.2.1. Postgres host:5433, Redis host:6380, sisanya default.
 - [x] **Workspace**: env var `NEXUS_WORKSPACE_ROOT` (wajib absolute path di `.env`); fail-fast kalau kosong.
 - [x] **CLI v1**: `claude` + `hermes`. `cursor-agent` + `gemini` di Phase 5 (binary di PATH host atau override via env var).
-- [x] **License**: proprietary, © Rahmat Kurnia (interim, personal project).
+- [x] **License**: MIT, © Rahmat Kurnia.
 
 Semua checkpoint approved. Siap lanjut scaffold Phase 0.
 

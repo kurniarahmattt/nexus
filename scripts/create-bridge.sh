@@ -63,7 +63,9 @@ else
   SLUG="${CLI}-${USERNAME}"
   BOT_DISPLAY="${CLI^} (${USERNAME})"
 fi
-BOT_PASSWORD="nexus_bridge_${SLUG}"
+# Random per-bot RC password. Only used here to capture authToken via
+# /api/v1/login (below). Discarded after — never persisted to our DB.
+BOT_PASSWORD="nx-$(openssl rand -base64 18 | tr -d '=+/' | cut -c1-16)"
 BRIDGE_TOKEN="$(openssl rand -hex 24)"
 
 # Persist a config template next to the repo so the user can edit + share

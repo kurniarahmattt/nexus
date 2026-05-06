@@ -464,8 +464,11 @@ r.post("/me/bridges", requireSession, async (c) => {
     return c.json({ error: "slug_exists", slug }, 409);
   }
 
-  // Create RC bot user.
-  const botPassword = "nexus_bridge_" + slug;
+  // Create RC bot user. Password is random per-bot — only used at this
+  // creation step to capture authToken via /api/v1/login (line below).
+  // After that, the authToken is what's persisted and reused; the password
+  // is discarded and never stored in our DB.
+  const botPassword = randomPassword();
   const email = `${slug}@nexus.local`;
   const botDisplay = display_name ?? `${cli[0]!.toUpperCase()}${cli.slice(1)} (${session.username}${name ? "-" + name : ""})`;
   let rcBotId: string;

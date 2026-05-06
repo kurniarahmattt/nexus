@@ -1,7 +1,7 @@
 /**
  * Phase 4 summarizer. Calls the OpenAI-compatible endpoint already used by
- * Mem0 (vLLM Gemma-4-31B for Mas). Caches in Postgres `summaries` table
- * keyed by room + (start_ts, end_ts) range.
+ * Mem0 (configurable via MEM0_LLM_BASE_URL). Caches in Postgres
+ * `summaries` table keyed by room + (start_ts, end_ts) range.
  */
 
 import { pool } from "./db.ts";

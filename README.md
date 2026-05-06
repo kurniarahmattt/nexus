@@ -293,8 +293,22 @@ The compose file resolves `${VAR:-default}` for everything, so a real
   log. The source of truth for design decisions.
 - [docs/BRIDGES.md](docs/BRIDGES.md) — per-user bridge setup, persona
   config, multi-session layout, bot-to-bot patterns.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to send patches, what's in
+  scope, code style.
+- [SECURITY.md](SECURITY.md) — how to report vulnerabilities (privately,
+  please).
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards.
 - `make help` — all available Makefile targets.
+
+## Contributing
+
+Issues, pull requests, and discussions are welcome. Bug reports, doc
+fixes, new CLI adapters, and production-hardening work are all good
+fits — see [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
+
+For security issues, please follow [SECURITY.md](SECURITY.md) instead of
+opening a public issue.
 
 ## License
 
-Proprietary — © Rahmat Kurnia (interim, personal project). See [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Rahmat Kurnia.
