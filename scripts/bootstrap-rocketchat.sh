@@ -339,6 +339,19 @@ curl -sfS -X POST "${RC_URL}/api/v1/integrations.update" \
   && log "  RC cache refreshed" \
   || log "  warn: REST update failed (cache may not refresh)"
 
+# Warm Mem0 lazy init so the first user mention isn't blocked by a 90 MB
+# HuggingFace model download. Best-effort: tolerate failure (e.g. running
+# stack hasn't finished startup) — the first /memories request will still
+# trigger init on demand.
+MEM0_URL="${MEM0_API_URL:-http://localhost:4100}"
+log "Warming Mem0 (lazy init)..."
+warm_resp=$(curl -sS --max-time 120 -X POST "${MEM0_URL}/admin/init" 2>&1 || true)
+case "$warm_resp" in
+  *'"ok":true'*) log "  Mem0 ready" ;;
+  *)             log "  warn: Mem0 warmup did not confirm; first request will retry"
+                 log "        response: $(echo "$warm_resp" | head -c 200)" ;;
+esac
+
 log ""
 log "Bootstrap complete."
 log "  → Open ${RC_URL} and login as ${RC_ADMIN_USER} / ${RC_ADMIN_PASS}"

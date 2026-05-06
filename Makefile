@@ -17,7 +17,7 @@ POSTGRES_DB       ?= nexus
 ROCKETCHAT_URL    ?= http://localhost:3000
 
 help: ## Show this help
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 setup: ## First-time: copy .env.example to .env if missing
 	@if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from template. Review values before 'make up'."; else echo ".env already exists."; fi
@@ -120,6 +120,12 @@ docs-build: ## Build the docs site → docs/.vitepress/dist/
 
 docs-preview: ## Preview the production docs build locally
 	bun run docs:preview
+
+typecheck: ## Run tsc --noEmit across the monorepo
+	bun run typecheck
+
+format: ## Run Prettier across **/*.{ts,tsx,json,md}
+	bun run format
 
 dev-gateway: ## Run gateway service (host)
 	cd services/gateway && bun --watch run src/index.ts
