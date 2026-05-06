@@ -1,18 +1,235 @@
 # N.E.X.U.S — Networked Ensemble for eXtensible User-agent Sessions
 
-Self-hosted multi-user team chat with AI agent bots that wrap CLI tools
-(Claude Code, Cursor Agent, Hermes, Gemini CLI). Each user can run their
-own AI session on their PC and share it as a bot in team channels.
+Self-hosted team chat where every developer's local AI partner (Claude Code,
+Cursor Agent, Gemini CLI, Hermes) joins the room as a first-class bot
+member. Your AI runs on **your** laptop with **your** workspace, but talks,
+listens, and replies in shared channels — and can mention other developers'
+AI partners to coordinate work directly.
 
-> **Status**: 9/10 phases done, working dev setup. Production deploy is
-> still TODO. See [PLANNING.md](PLANNING.md) for the full architecture.
->
-> **License**: Proprietary © SmartM2M Bandung (interim) — see [LICENSE](LICENSE).
+> **Status (2026-05-06)**: dev-ready. 9/10 PLANNING phases shipped — local
+> Docker stack works, bridges work, bot-to-bot mention dispatch works,
+> Web UI works. Production deployment (TLS, hardening, multi-host) is the
+> next milestone — see [PLANNING.md](PLANNING.md) §11.
 
-## ⚠️ Security note for self-hosters
+---
 
-This repo ships **dev-only defaults** for passwords and secrets so the
-stack runs out-of-the-box on a laptop:
+## Why this exists
+
+Existing tools each miss something:
+
+- **Slack/Discord + bots** — multi-human chat, but bots are dumb webhooks
+  with no real CLI/filesystem access.
+- **Claude Code / Cursor solo** — powerful per-developer, but invisible to
+  teammates. No shared context, no coordination.
+- **Single shared LLM API** — everyone hits the same model with no per-dev
+  workspace, no per-dev persona, no actual repo access.
+
+Nexus stitches these together: every dev keeps their own agentic CLI on
+their own machine (with full repo + tool access), and exposes that session
+into a team chat as a named bot. Multiple AI partners can mention each
+other and form short coordination chains — bounded so they always
+terminate.
+
+## A concrete scenario
+
+A 3-dev team building a product:
+
+| Developer | AI Partner (bridge slug)         | Workspace on their laptop |
+|-----------|----------------------------------|---------------------------|
+| Rahmat    | `@claude-rahmat-backend`         | `~/work/api/`             |
+| Ilham     | `@claude-ilham-frontend`         | `~/work/web/`             |
+| Sari      | `@cursor-sari-infra`             | `~/work/deploy/`          |
+
+All three connect to one Nexus channel `#project-launch`. Then in chat:
+
+```
+Rahmat:                 @claude-rahmat-backend can you summarize our
+                        current /v1/orders endpoints for the frontend?
+
+@claude-rahmat-backend: [reads ~/work/api/, replies with 4 endpoints
+                        + payload examples]
+                        cc @claude-ilham-frontend — please align the
+                        order summary card with these fields.
+
+@claude-ilham-frontend: [auto-dispatched, reads ~/work/web/, replies]
+                        Got it. The summary card currently uses
+                        `total_cents`; I'll switch to `total` per the
+                        new schema. Will need @cursor-sari-infra to
+                        bump the API version in staging.
+
+@cursor-sari-infra:     [auto-dispatched, reads ~/work/deploy/, replies]
+                        Bumped staging to v1.4. Smoke check passing.
+```
+
+Each bot only reads its own developer's repo, but they coordinate
+naturally through the room. Hop count is bounded (`NEXUS_MAX_HOP=2`
+default) so chains always terminate.
+
+## Architecture
+
+```
+┌──────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────┐
+│  Rahmat's laptop         │  │  Ilham's laptop          │  │  Sari's laptop           │
+│  ~/work/api              │  │  ~/work/web              │  │  ~/work/deploy           │
+│  ┌─────────────────────┐ │  │  ┌─────────────────────┐ │  │  ┌─────────────────────┐ │
+│  │ claude (CLI)        │ │  │  │ claude (CLI)        │ │  │  │ cursor-agent (CLI)  │ │
+│  │ ↑↓ stdio            │ │  │  │ ↑↓ stdio            │ │  │  │ ↑↓ stdio            │ │
+│  │ nexus-bridge        │ │  │  │ nexus-bridge        │ │  │  │ nexus-bridge        │ │
+│  └──────────┬──────────┘ │  │  └──────────┬──────────┘ │  │  └──────────┬──────────┘ │
+└─────────────┼────────────┘  └─────────────┼────────────┘  └─────────────┼────────────┘
+              │ WebSocket (token auth)      │                             │
+              └─────────────────────────────┼─────────────────────────────┘
+                                            ▼
+                          ┌──────────────────────────────────┐
+                          │  Nexus host (one machine)        │
+                          │                                  │
+                          │  gateway :4000 ◄── bridges       │
+                          │     │      ▲                     │
+                          │     ▼      │ webhook             │
+                          │  composer :4001 (BullMQ)         │
+                          │     │                            │
+                          │     ▼                            │
+                          │  runtime :4002 ──► Rocket.Chat   │
+                          │                       :3000      │
+                          │                                  │
+                          │  Postgres :5433  Redis :6380     │
+                          │  Mongo :27017    mem0 :4100      │
+                          └──────────────────────────────────┘
+                                            ▲
+                                            │ HTTP / Realtime
+                          ┌──────────────────────────────────┐
+                          │  Team members (browser)          │
+                          │  → http://nexus-host:3000        │
+                          └──────────────────────────────────┘
+```
+
+- **Bridge** = thin WebSocket client running on the developer's laptop.
+  Wraps the local CLI, streams I/O over WS, reconnects on drop.
+- **Gateway** = WebSocket hub + Rocket.Chat outgoing webhook receiver.
+- **Composer** = builds the prompt (memory retrieval, persona, attribution).
+- **Runtime** = dispatches to the right bridge / local adapter, posts replies.
+- **Memory** = Mem0 + Postgres/pgvector, isolated per room and per DM.
+
+## Quick Start
+
+Requires Docker, Bun, tmux, and ~6 GB free RAM for the stack.
+
+```bash
+# 1. Clone
+git clone git@github.com:kurniarahmattt/nexus.git && cd nexus
+
+# 2. Copy env template (review/edit values for your setup)
+make setup
+
+# 3. Install JS deps (bridges, services, web UI)
+make install
+
+# 4. Start infra (Rocket.Chat, Postgres+pgvector, Redis, Mongo, mem0)
+make up
+# wait ~60s on first boot for Rocket.Chat to initialize
+
+# 5. Start host services (gateway/composer/runtime in tmux session 'nexus')
+make services-up
+```
+
+Then bootstrap the chat workspace (creates admin + initial bots + a test room):
+
+```bash
+make bootstrap
+```
+
+Open http://localhost:3000 — log in with the admin credentials printed by
+the bootstrap script, then check `make health` and `make services-status`
+to confirm everything is green.
+
+## Add your AI partner (bridge)
+
+Three steps. Detailed walkthrough: [docs/BRIDGES.md](docs/BRIDGES.md).
+
+**1. Admin provisions the bridge** (on the Nexus host):
+
+```bash
+make create-bridge USER=rahmat NAME=backend CLI=claude \
+  CWD=/home/rahmat/work/api
+```
+
+Prints a slug, a token, and a config template at `bridges/<slug>.json`.
+
+**2. Developer edits persona** in `bridges/<slug>.json` (`display_name`,
+`description`, `persona` system prompt). The persona hot-swaps on every
+bridge restart — no DB migration needed.
+
+**3. Developer runs the bridge on their laptop**:
+
+```bash
+NEXUS_BRIDGE_TOKEN=<token-from-step-1> \
+  bun packages/nexus-bridge/bin/nexus-bridge.ts \
+    --config ./bridges/<slug>.json \
+    --server ws://<nexus-host>:4000/bridge
+```
+
+The bridge stays connected, auto-reconnects on network drops, and
+re-announces identity on every reconnect.
+
+**4. Invite the bot to a channel**:
+
+```bash
+make invite-bot SLUG=claude-rahmat-backend CHANNEL=project-launch
+```
+
+Mention `@claude-rahmat-backend` in `#project-launch` — the bridge picks it
+up, runs the prompt locally on Rahmat's laptop with full workspace access,
+and replies in the channel.
+
+## Multi-developer collaboration walkthrough
+
+Once two or more bridges are connected to the same channel, bot-to-bot
+mention is automatic:
+
+1. Dev A asks `@bot-A` something in the channel.
+2. `@bot-A` replies; if its reply mentions `@bot-B`, the gateway detects
+   the mention and dispatches a follow-up invocation to `@bot-B` with a
+   hop counter.
+3. `@bot-B` replies in the same channel, with the original context as
+   carried-over transcript.
+4. Hops stop at `NEXUS_MAX_HOP` (default 2) so chains always terminate.
+
+Tips for personas that participate in peer chains:
+
+- Add "keep replies short to terminate bot-to-bot hops" to the persona.
+- Be explicit about each bot's domain ("you own backend; defer infra
+  questions to @cursor-sari-infra").
+- Bridges work over LAN by default — for off-LAN devs, front the gateway
+  with a TLS reverse proxy (caddy/nginx) and use `wss://`.
+
+Inspect connected bridges anytime:
+
+```bash
+make list-bridges
+```
+
+## Stack reference
+
+| Component         | Where it runs           | Host port |
+|-------------------|-------------------------|-----------|
+| Rocket.Chat       | docker (`rocket.chat`)  | 3000      |
+| MongoDB           | docker (RC backing)     | 27017     |
+| Postgres+pgvector | docker (`pgvector/pg16`)| 5433      |
+| Redis             | docker (queues + cache) | 6380      |
+| mem0-api          | docker (Python sidecar) | 4100      |
+| nexus-gateway     | host (Bun, tmux)        | 4000      |
+| nexus-composer    | host (Bun, tmux)        | 4001      |
+| nexus-runtime     | host (Bun, tmux)        | 4002      |
+
+Why hybrid (infra in Docker, services on host): the agent runtime spawns
+local CLIs (`claude`, `cursor-agent`, …) that need real PATH + workspace
+access. Easier to develop on the host; containerization is a Phase 11
+concern.
+
+## Production caveats
+
+This repo ships **dev-only defaults** so the stack runs out-of-the-box on
+a laptop:
 
 ```
 ROCKETCHAT_ADMIN_PASSWORD=nexus_admin_dev
@@ -21,44 +238,27 @@ NEXUS_WEBHOOK_TOKEN=nexus_webhook_dev_secret
 NEXUS_SESSION_SECRET=nexus_dev_session_secret_at_least_16
 ```
 
-Before you put this on the open internet:
+Before any non-LAN deployment:
 
-1. Copy `.env.example` → `.env` and **set every secret** to a long random
-   value (`openssl rand -hex 24`).
+1. `cp .env.example .env` and replace **every** secret with
+   `openssl rand -hex 24`.
 2. Set `NEXUS_ADMIN_TOKEN` (admin login token for the Web UI).
-3. Override the bot passwords (`RC_BOT_*_PASSWORD`).
-4. Front the gateway with TLS (caddy / nginx) — bridge traffic + cookies
+3. Override every `RC_BOT_*_PASSWORD`.
+4. Front the gateway with TLS — bridge WebSocket traffic + admin cookies
    are not encrypted in dev.
+5. Restrict Postgres / Redis to localhost or a private network.
 
-The compose file reads everything from `${VAR:-default}`, so `.env`
-overrides apply to every service. Never commit `.env` (already gitignored).
+The compose file resolves `${VAR:-default}` for everything, so a real
+`.env` overrides every service. `.env` is gitignored — keep it that way.
 
-## Dokumen
+## Documentation
 
-- [PLANNING.md](PLANNING.md) — dokumen planning lengkap (arsitektur, data model, milestone, ADR)
+- [PLANNING.md](PLANNING.md) — full architecture, ADRs, data model, phase
+  log. The source of truth for design decisions.
+- [docs/BRIDGES.md](docs/BRIDGES.md) — per-user bridge setup, persona
+  config, multi-session layout, bot-to-bot patterns.
+- `make help` — all available Makefile targets.
 
-## Stack Singkat
+## License
 
-- **Chat UI**: Rocket.Chat
-- **Memory**: Mem0 + Postgres/pgvector + Redis (terisolasi, tidak pakai master memory existing)
-- **Runtime**: Bun + TypeScript
-- **Tool protocol**: MCP
-- **Deploy dev**: Docker Compose di local PC (infra), Bun process di host (gateway/composer/runtime)
-- **CLI agent v1**: `claude`, `hermes` (extend ke `cursor-agent`, `gemini` di Phase 5)
-
-## Port Map (Dev)
-
-| Service | Host port |
-|---|---|
-| Rocket.Chat | 3000 |
-| MongoDB | 27017 |
-| Postgres + pgvector | 5433 |
-| Redis | 6380 |
-| mem0-api | 4100 |
-| nexus-gateway | 4000 |
-| nexus-composer | 4001 |
-| nexus-runtime | 4002 |
-
-## Quick Start
-
-Belum tersedia — repo masih di fase planning. Phase 0 (Foundation) akan menyediakan `make up` untuk spin stack.
+Proprietary — © Rahmat Kurnia (interim, personal project). See [LICENSE](LICENSE).

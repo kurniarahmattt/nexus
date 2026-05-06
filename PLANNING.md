@@ -5,7 +5,7 @@
 > **Tanggal**: 2026-04-21
 > **Penanggung jawab**: Mas Rahmat (lead) + G.I.N.G (co-architect)
 > **Codename**: **N.E.X.U.S** — **N**etworked **E**nsemble for e**X**tensible **U**ser-agent **S**essions
-> **License**: Proprietary — © SmartM2M Bandung (interim)
+> **License**: Proprietary — © Rahmat Kurnia (interim, personal project)
 
 ---
 
@@ -39,7 +39,7 @@
 | ADR-009 | **Skill registry** — integrasi OpenSpace ditunda ke Phase 8 | Phase awal fokus ke memory + routing. Skill integration menambah kompleksitas yang belum perlu. |
 | ADR-010 | **CLI agent v1 hanya `claude` + `hermes`** | Mas prefer start minimal. `cursor-agent` dan `gemini` akan ditambah di Phase 5 (Multi-Agent Expansion) setelah pola adapter stabil. |
 | ADR-011 | **Workspace path via env var** (`NEXUS_WORKSPACE_ROOT`) | Dev default `/home/kurniarahmat/coding/`. Prod di server akan override via `.env`. |
-| ADR-012 | **License interim: proprietary, © SmartM2M Bandung** | Keputusan final license ditunda sampai kebijakan legal perusahaan jelas. |
+| ADR-012 | **License interim: proprietary, © Rahmat Kurnia (personal)** | Repo personal Mas Rahmat. Keputusan license final (MIT/Apache vs tetap proprietary) ditunda sampai siap rilis publik. |
 
 ---
 
@@ -823,7 +823,7 @@ Setelah plan ini di-approve Mas Rahmat, urutan eksekusi:
 - [x] **Port allocation**: verified clean, final mapping di §8.2.1. Postgres host:5433, Redis host:6380, sisanya default.
 - [x] **Workspace**: env var `NEXUS_WORKSPACE_ROOT=/home/kurniarahmat/coding` untuk dev; override via `.env` di prod.
 - [x] **CLI v1**: `claude` + `hermes`. `cursor-agent` + `gemini` di Phase 5 (binary sudah terinstall di PC Mas).
-- [x] **License**: proprietary, © SmartM2M Bandung (interim).
+- [x] **License**: proprietary, © Rahmat Kurnia (interim, personal project).
 
 Semua checkpoint approved. Siap lanjut scaffold Phase 0.
 
