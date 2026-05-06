@@ -22,6 +22,8 @@ bridges/*.json
 # Built artefacts
 services/web/dist/
 packages/nexus-bridge/dist/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 
 # IDE
 .idea/

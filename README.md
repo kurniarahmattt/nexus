@@ -6,6 +6,8 @@ member. Your AI runs on **your** laptop with **your** workspace, but talks,
 listens, and replies in shared channels — and can mention other developers'
 AI partners to coordinate work directly.
 
+> 📖 **Full documentation**: <https://kurniarahmattt.github.io/nexus/>
+
 > **Status (2026-05-06)**: dev-ready. 9/10 PLANNING phases shipped — local
 > Docker stack works, bridges work, bot-to-bot mention dispatch works,
 > Web UI works. Production deployment (TLS, hardening, multi-host) is the

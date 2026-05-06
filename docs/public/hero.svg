@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="320" y2="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#646cff"/>
+      <stop offset="1" stop-color="#42d392"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="160" cy="160" r="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#646cff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#646cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="160" cy="160" r="140" fill="url(#g2)"/>
+
+  <!-- center hub -->
+  <circle cx="160" cy="160" r="34" fill="url(#g1)" opacity="0.95"/>
+  <circle cx="160" cy="160" r="14" fill="#fff"/>
+
+  <!-- spokes -->
+  <g stroke="url(#g1)" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.85">
+    <line x1="160" y1="160" x2="60"  y2="60"/>
+    <line x1="160" y1="160" x2="260" y2="60"/>
+    <line x1="160" y1="160" x2="60"  y2="260"/>
+    <line x1="160" y1="160" x2="260" y2="260"/>
+    <line x1="160" y1="160" x2="160" y2="40"/>
+    <line x1="160" y1="160" x2="160" y2="280"/>
+  </g>
+
+  <!-- spoke nodes (peers) -->
+  <g fill="url(#g1)">
+    <circle cx="60"  cy="60"  r="14"/>
+    <circle cx="260" cy="60"  r="14"/>
+    <circle cx="60"  cy="260" r="14"/>
+    <circle cx="260" cy="260" r="14"/>
+    <circle cx="160" cy="40"  r="12"/>
+    <circle cx="160" cy="280" r="12"/>
+  </g>
+  <g fill="#fff">
+    <circle cx="60"  cy="60"  r="6"/>
+    <circle cx="260" cy="60"  r="6"/>
+    <circle cx="60"  cy="260" r="6"/>
+    <circle cx="260" cy="260" r="6"/>
+    <circle cx="160" cy="40"  r="5"/>
+    <circle cx="160" cy="280" r="5"/>
+  </g>
+</svg>

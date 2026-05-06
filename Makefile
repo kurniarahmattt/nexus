@@ -112,6 +112,15 @@ build-bridge: ## Bundle nexus-bridge.ts to single-file JS for user distribution
 web-dev: ## Run Vite dev server (5173) with /api proxy to gateway
 	cd services/web && bun run dev
 
+docs-dev: ## Run VitePress dev server (5174) with HMR
+	bun run docs:dev
+
+docs-build: ## Build the docs site → docs/.vitepress/dist/
+	bun run docs:build
+
+docs-preview: ## Preview the production docs build locally
+	bun run docs:preview
+
 dev-gateway: ## Run gateway service (host)
 	cd services/gateway && bun --watch run src/index.ts
 

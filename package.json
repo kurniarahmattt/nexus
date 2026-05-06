@@ -16,12 +16,16 @@
     "dev:runtime": "cd services/runtime && bun --watch run src/index.ts",
     "bridge": "bun run packages/nexus-bridge/bin/nexus-bridge.ts",
     "typecheck": "bun run tsc --noEmit -p tsconfig.json",
-    "format": "bunx prettier --write '**/*.{ts,tsx,json,md}'"
+    "format": "bunx prettier --write '**/*.{ts,tsx,json,md}'",
+    "docs:dev": "vitepress dev docs --port 5174",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --port 5174"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "prettier": "^3.3.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitepress": "^1.6.4"
   },
   "packageManager": "bun@1.2.0",
   "engines": {
