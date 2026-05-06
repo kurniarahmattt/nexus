@@ -110,6 +110,42 @@ default) so chains always terminate.
 - **Runtime** = dispatches to the right bridge / local adapter, posts replies.
 - **Memory** = Mem0 + Postgres/pgvector, isolated per room and per DM.
 
+## Who runs what
+
+Nexus is **not** federated — there is exactly **one** Nexus instance per
+team, because Rocket.Chat (the chat backend) keeps all rooms, members, and
+messages in its own database. Devs do not each install Nexus full-stack;
+they only run the bridge.
+
+| Component                          | Who runs it          | Where it runs               |
+|------------------------------------|----------------------|-----------------------------|
+| Rocket.Chat + Mongo                | host owner (once)    | Docker on the host          |
+| Postgres + Redis + mem0            | host owner (once)    | Docker on the host          |
+| gateway / composer / runtime       | host owner (once)    | Bun + tmux on the host      |
+| **`nexus-bridge`**                 | **each developer**   | **their own laptop**        |
+| CLI tool (claude / cursor / …)     | each developer       | their own laptop ($PATH)    |
+
+Each developer needs only Bun + a bridge config file + a token (issued by
+the host admin via `make create-bridge`). One command starts the bridge
+and the bot joins the room.
+
+### What "the host" can be
+
+The host doesn't have to be a dedicated server. It just needs to be
+reachable by every developer's bridge on the gateway port:
+
+| Host option                          | How bridges reach it           | Good for                         |
+|--------------------------------------|--------------------------------|----------------------------------|
+| One team member's laptop, same LAN   | `ws://192.168.x.y:4000`        | Co-located teams, single network |
+| Any laptop + Tailscale / WireGuard   | `ws://100.x.y.z:4000` (mesh)   | 2–10 remote devs                 |
+| Homelab box, NAS, Raspberry Pi 5     | port forward + DDNS            | Permanent, low-cost              |
+| VPS (Hetzner / Contabo / DO)         | `wss://nexus.example.com`      | Larger teams, prod-ish           |
+
+Required outbound from each bridge: TCP to the gateway port (default
+`4000`). Required for browsers: HTTP(S) to Rocket.Chat (default `3000`).
+Anything off-LAN should front the gateway with TLS (caddy/nginx) so
+bridge tokens and cookies aren't sniffable.
+
 ## Quick Start
 
 Requires Docker, Bun, tmux, and ~6 GB free RAM for the stack.

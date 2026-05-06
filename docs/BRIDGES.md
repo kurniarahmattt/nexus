@@ -91,7 +91,7 @@ NEXUS_BRIDGE_TOKEN=1a2b3c4d5e6f... \
 Output:
 
 ```
-[15:12:03] [INFO] connecting to ws://192.168.1.187:4000/bridge
+[15:12:03] [INFO] connecting to ws://192.168.x.y:4000/bridge
 [15:12:03] [INFO] ws opened, sending hello with identity
 [15:12:03] [INFO] bridge authenticated {"slug":"claude-alice-backend","cli_kind":"claude","cwd":"/home/alice/coding/nexus/backend"}
 ```
