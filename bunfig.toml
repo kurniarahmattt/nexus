@@ -1,0 +1,6 @@
+[install]
+# Use workspaces from package.json
+registry = "https://registry.npmjs.org"
+
+[install.cache]
+disable = false

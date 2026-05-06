@@ -1,0 +1,17 @@
+{
+  "name": "@nexus/nexus-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "nexus-bridge": "./bin/nexus-bridge.ts"
+  },
+  "scripts": {
+    "start": "bun run bin/nexus-bridge.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}

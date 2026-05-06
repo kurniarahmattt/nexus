@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+.env.local
+dist
+build
+*.log
+docker-data
+coverage
+.venv
+__pycache__

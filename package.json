@@ -1,0 +1,30 @@
+{
+  "name": "nexus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "N.E.X.U.S — Networked Ensemble for eXtensible User-agent Sessions",
+  "workspaces": [
+    "packages/*",
+    "services/gateway",
+    "services/composer",
+    "services/runtime",
+    "services/web"
+  ],
+  "scripts": {
+    "dev:gateway": "cd services/gateway && bun --watch run src/index.ts",
+    "dev:composer": "cd services/composer && bun --watch run src/index.ts",
+    "dev:runtime": "cd services/runtime && bun --watch run src/index.ts",
+    "bridge": "bun run packages/nexus-bridge/bin/nexus-bridge.ts",
+    "typecheck": "bun run tsc --noEmit -p tsconfig.json",
+    "format": "bunx prettier --write '**/*.{ts,tsx,json,md}'"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0"
+  },
+  "packageManager": "bun@1.2.0",
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}

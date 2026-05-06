@@ -1,0 +1,61 @@
+node_modules/
+dist/
+build/
+.turbo/
+
+# Bun
+bun.lockb
+.bun/
+
+# Env (NEVER commit — contains live secrets)
+.env
+.env.local
+.env.*.local
+
+# Per-bridge configs (local provisioning artefacts)
+bridges/*.json
+!bridges/.gitkeep
+
+# Local Claude Code allowlist (may pin curl commands with dev creds)
+.claude/settings.local.json
+
+# Built artefacts
+services/web/dist/
+packages/nexus-bridge/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Docker volumes (local dev)
+docker-data/
+
+# Python (mem0-api)
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# Test outputs
+coverage/
+
+# CLI scratch dir
+/nexus-scratch/
+
+# Editor
+*.tmp
+.history/

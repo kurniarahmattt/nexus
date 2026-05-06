@@ -1,0 +1,176 @@
+# ==============================================================================
+# N.E.X.U.S — Dev Stack
+# ==============================================================================
+# Stateful infrastructure services. Custom services (gateway, composer, runtime)
+# jalan di host sebagai Bun process — lihat Makefile untuk `make dev-services`.
+#
+# Port mapping (host -> container):
+#   rocketchat:  3000 -> 3000
+#   mongo:      27017 -> 27017
+#   postgres:    5433 -> 5432    (non-default di host, menghindari konflik)
+#   redis:       6380 -> 6379    (non-default di host, menghindari konflik)
+#   mem0-api:    4100 -> 4100
+# ==============================================================================
+
+name: nexus
+
+services:
+  mongo:
+    image: mongo:6
+    container_name: nexus-mongo
+    restart: unless-stopped
+    command:
+      - --replSet=rs0
+      - --oplogSize=128
+      - --bind_ip_all
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    healthcheck:
+      test: |
+        mongosh --quiet --eval 'try { rs.status().ok } catch(e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}).ok }'
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [nexus-net]
+
+  # Init container — kick replica set once so Rocket.Chat can use oplog tailing
+  mongo-init:
+    image: mongo:6
+    container_name: nexus-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    command: >
+      mongosh --host mongo:27017 --quiet --eval
+      'try { rs.status() } catch (e) {
+         rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]})
+       }'
+    networks: [nexus-net]
+
+  rocketchat:
+    # Pinned to 6.13 (last 6.x LTS minor) — pre-dates the strict read-only
+    # enforcement in 7.x/8.x that requires cloud.rocket.chat validation.
+    # Works fully offline for dev. Upgrade path evaluated separately for prod.
+    image: rocket.chat:6.13.1
+    container_name: nexus-rocketchat
+    restart: unless-stopped
+    # Allow the container to reach Bun services running on the host (gateway,
+    # composer, runtime). Outgoing webhooks post to host.docker.internal:4000.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      ROOT_URL: ${ROCKETCHAT_URL:-http://localhost:3000}
+      MONGO_URL: mongodb://mongo:27017/rocketchat?replicaSet=rs0
+      MONGO_OPLOG_URL: mongodb://mongo:27017/local?replicaSet=rs0
+      DEPLOY_METHOD: docker
+      # Pre-provision admin from env (skips setup wizard)
+      ADMIN_USERNAME: ${ROCKETCHAT_ADMIN_USERNAME:-admin}
+      ADMIN_PASS: ${ROCKETCHAT_ADMIN_PASSWORD:-nexus_admin_dev}
+      ADMIN_EMAIL: ${ROCKETCHAT_ADMIN_EMAIL:-admin@nexus.local}
+      OVERWRITE_SETTING_Show_Setup_Wizard: completed
+      OVERWRITE_SETTING_Accounts_UseDNSDomainCheck: "false"
+    volumes:
+      - rocketchat-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/info > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks: [nexus-net]
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nexus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_dev_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-nexus}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexus} -d ${POSTGRES_DB:-nexus}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [nexus-net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [nexus-net]
+
+  mem0-api:
+    build:
+      context: ./services/mem0-api
+      dockerfile: Dockerfile
+    container_name: nexus-mem0-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4100:4100"
+    environment:
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus_dev_pass}@postgres:5432/${POSTGRES_DB:-nexus}
+      MEM0_LLM_PROVIDER: ${MEM0_LLM_PROVIDER:-openai}
+      MEM0_LLM_MODEL: ${MEM0_LLM_MODEL:-QuantTrio/gemma-4-31B-it-AWQ}
+      MEM0_LLM_BASE_URL: ${MEM0_LLM_BASE_URL:-}
+      MEM0_LLM_API_KEY: ${MEM0_LLM_API_KEY:-dummy}
+      MEM0_EMBEDDER_PROVIDER: ${MEM0_EMBEDDER_PROVIDER:-huggingface}
+      MEM0_EMBEDDER_MODEL: ${MEM0_EMBEDDER_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      MEM0_EMBEDDING_DIMS: ${MEM0_EMBEDDING_DIMS:-384}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # HF cache persists across container restarts via volume.
+      HF_HOME: /root/.cache/huggingface
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4100/health > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks: [nexus-net]
+
+networks:
+  nexus-net:
+    name: nexus-net
+    driver: bridge
+
+volumes:
+  mongo-data:
+  mongo-config:
+  rocketchat-uploads:
+  pg-data:
+  redis-data:
+  hf-cache:

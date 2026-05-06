@@ -1,0 +1,26 @@
+{
+  "name": "@nexus/composer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch run src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@nexus/schema": "workspace:*",
+    "bullmq": "^5.21.0",
+    "hono": "^4.6.0",
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.6.0"
+  }
+}
