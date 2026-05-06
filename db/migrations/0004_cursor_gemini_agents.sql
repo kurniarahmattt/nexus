@@ -1,11 +1,12 @@
 -- ============================================================================
 -- Phase 5 — Multi-Agent Expansion: add cursor + gemini
--- Idempotent. Binaries resolved at /home/kurniarahmat/.local/bin/ (host).
+-- Idempotent. Binaries resolved via $PATH; runtime adapters honor
+-- CLAUDE_BIN/HERMES_BIN/CURSOR_BIN/GEMINI_BIN env vars to override.
 -- ============================================================================
 
 INSERT INTO agents (slug, display_name, cli_command, cli_args, rocketchat_username, config, enabled)
 VALUES
-  ('cursor', 'Cursor Agent', '/home/kurniarahmat/.local/bin/agent', '[]'::jsonb,
+  ('cursor', 'Cursor Agent', 'agent', '[]'::jsonb,
    'cursor',
    jsonb_build_object(
      'description','Cursor IDE agent (non-interactive). Identical binary to cursor-agent.',
@@ -22,7 +23,7 @@ VALUES
 - Introduce yourself as "Cursor (Nexus bot)" if asked.$$
    ),
    true),
-  ('gemini', 'Gemini CLI', '/home/kurniarahmat/.local/bin/gemini', '[]'::jsonb,
+  ('gemini', 'Gemini CLI', 'gemini', '[]'::jsonb,
    'gemini',
    jsonb_build_object(
      'description','Google Gemini CLI (non-interactive -p mode).',

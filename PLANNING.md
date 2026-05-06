@@ -35,10 +35,10 @@
 | ADR-005 | **Bun + TypeScript** untuk layanan custom (Gateway, Composer, Runtime) | Performa tinggi, TypeScript native, startup cepat — cocok untuk service yang banyak I/O async. |
 | ADR-006 | **Hybrid deploy di dev**: infra stateful di Docker, agent runtime di host | CLI tools (claude-code, cursor, hermes) ada di host. Containerize agent runtime di dev = kompleks (binary path, workspace mount, OS mismatch). Simpan itu untuk production. |
 | ADR-007 | **MCP (Model Context Protocol)** untuk tool layer | Sudah standar; Claude Code native; mudah tambah tool baru tanpa ubah runtime. |
-| ADR-008 | **Fresh memory isolation** | TIDAK menyentuh `/home/kurniarahmat/MASTER_MEMORY/brain.json` atau MCP memory server global. Nexus memory tersimpan di Postgres container milik Nexus sendiri. |
+| ADR-008 | **Fresh memory isolation** | TIDAK menyentuh memory server / knowledge graph milik tooling lain di host. Nexus memory tersimpan di Postgres container milik Nexus sendiri. |
 | ADR-009 | **Skill registry** — integrasi OpenSpace ditunda ke Phase 8 | Phase awal fokus ke memory + routing. Skill integration menambah kompleksitas yang belum perlu. |
 | ADR-010 | **CLI agent v1 hanya `claude` + `hermes`** | Mas prefer start minimal. `cursor-agent` dan `gemini` akan ditambah di Phase 5 (Multi-Agent Expansion) setelah pola adapter stabil. |
-| ADR-011 | **Workspace path via env var** (`NEXUS_WORKSPACE_ROOT`) | Dev default `/home/kurniarahmat/coding/`. Prod di server akan override via `.env`. |
+| ADR-011 | **Workspace path via env var** (`NEXUS_WORKSPACE_ROOT`) | Wajib di-set absolute path di `.env`; tidak ada default fallback. Composer fail-fast kalau env kosong. |
 | ADR-012 | **License interim: proprietary, © Rahmat Kurnia (personal)** | Repo personal Mas Rahmat. Keputusan license final (MIT/Apache vs tetap proprietary) ditunda sampai siap rilis publik. |
 
 ---
@@ -637,10 +637,10 @@ Catatan: Postgres dan Redis pakai port non-default **di host** (5433/6380) sebag
 Agent butuh working directory untuk eksekusi tool (read/write file, bash). Dikontrol via env var di `.env`:
 
 ```bash
-NEXUS_WORKSPACE_ROOT=/home/kurniarahmat/coding
+NEXUS_WORKSPACE_ROOT=/path/to/your/coding-root
 ```
 
-Di dev = `/home/kurniarahmat/coding` (existing dir Mas). Di prod = akan di-mount ke path sesuai server. Composer selalu resolve path project via `${NEXUS_WORKSPACE_ROOT}/<project.slug>` — tabel `projects.workspace_path` hanya store slug relatif, bukan absolute path (supaya portable lintas environment).
+Di dev = absolute path ke folder berisi project-project yang akan di-mount agent. Di prod = akan di-mount ke path sesuai server. Composer selalu resolve path project via `${NEXUS_WORKSPACE_ROOT}/<project.slug>` — tabel `projects.workspace_path` hanya store slug relatif, bukan absolute path (supaya portable lintas environment).
 
 ### 8.3 Future: Production (di luar scope v1, sketsa saja)
 
@@ -821,8 +821,8 @@ Setelah plan ini di-approve Mas Rahmat, urutan eksekusi:
 
 - [x] **Codename**: **N.E.X.U.S** = *Networked Ensemble for eXtensible User-agent Sessions*
 - [x] **Port allocation**: verified clean, final mapping di §8.2.1. Postgres host:5433, Redis host:6380, sisanya default.
-- [x] **Workspace**: env var `NEXUS_WORKSPACE_ROOT=/home/kurniarahmat/coding` untuk dev; override via `.env` di prod.
-- [x] **CLI v1**: `claude` + `hermes`. `cursor-agent` + `gemini` di Phase 5 (binary sudah terinstall di PC Mas).
+- [x] **Workspace**: env var `NEXUS_WORKSPACE_ROOT` (wajib absolute path di `.env`); fail-fast kalau kosong.
+- [x] **CLI v1**: `claude` + `hermes`. `cursor-agent` + `gemini` di Phase 5 (binary di PATH host atau override via env var).
 - [x] **License**: proprietary, © Rahmat Kurnia (interim, personal project).
 
 Semua checkpoint approved. Siap lanjut scaffold Phase 0.

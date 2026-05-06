@@ -8,7 +8,7 @@ VALUES
   ('filesystem-scratch',
    'Filesystem (scratch workspace)',
    'npx',
-   '["-y","@modelcontextprotocol/server-filesystem","/home/kurniarahmat/coding/nexus-scratch"]'::jsonb,
+   '["-y","@modelcontextprotocol/server-filesystem","/tmp/nexus-scratch"]'::jsonb,
    '{}'::jsonb,
    'Read/write access restricted to the Nexus scratch directory. Safe for demos.',
    false),

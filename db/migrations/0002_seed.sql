@@ -7,11 +7,11 @@
 
 INSERT INTO agents (slug, display_name, cli_command, cli_args, rocketchat_username, config, enabled)
 VALUES
-  ('claude', 'Claude Code', '/home/kurniarahmat/.local/bin/claude', '[]'::jsonb,
+  ('claude', 'Claude Code', 'claude', '[]'::jsonb,
    'claude',
    '{"description":"Anthropic Claude Code CLI agent","model":"claude-sonnet-4-6"}'::jsonb,
    true),
-  ('hermes', 'Hermes Agent', '/home/kurniarahmat/.local/bin/hermes', '[]'::jsonb,
+  ('hermes', 'Hermes Agent', 'hermes', '[]'::jsonb,
    'hermes',
    '{"description":"Nous Research Hermes autonomous agent","model":"hermes-3"}'::jsonb,
    true)

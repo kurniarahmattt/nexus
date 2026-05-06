@@ -301,7 +301,7 @@ app.get("/health", (c) =>
 );
 
 // Preflight: invoke each adapter with a trivial "say ok" prompt and report
-// which binaries are alive. Useful for Mas to debug missing CLIs.
+// which binaries are alive. Useful for debugging missing CLIs on the host.
 app.get("/preflight", async (c) => {
   const { pool } = await import("./db.ts");
   const results: Array<{ slug: string; ok: boolean; durMs: number; reason?: string }> = [];

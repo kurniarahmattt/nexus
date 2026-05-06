@@ -43,8 +43,13 @@ const log = pino({
 const connection = new IORedis(env.REDIS_URL, { maxRetriesPerRequest: null });
 const executeQueue = new Queue<ExecuteJob>(QueueNames.execute, { connection });
 
-const WORKSPACE_ROOT =
-  process.env.NEXUS_WORKSPACE_ROOT ?? "/home/kurniarahmat/coding";
+if (!process.env.NEXUS_WORKSPACE_ROOT) {
+  throw new Error(
+    "NEXUS_WORKSPACE_ROOT must be set (absolute path to your projects root). " +
+      "See .env.example.",
+  );
+}
+const WORKSPACE_ROOT = process.env.NEXUS_WORKSPACE_ROOT;
 const SCRATCH_DIR = join(WORKSPACE_ROOT, "nexus-scratch");
 
 const TRANSCRIPT_WINDOW = Number(process.env.NEXUS_TRANSCRIPT_WINDOW ?? 20);
