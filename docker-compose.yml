@@ -2,13 +2,13 @@
 # N.E.X.U.S — Dev Stack
 # ==============================================================================
 # Stateful infrastructure services. Custom services (gateway, composer, runtime)
-# jalan di host sebagai Bun process — lihat Makefile untuk `make dev-services`.
+# run on the host as Bun processes — see Makefile, target `make dev-services`.
 #
 # Port mapping (host -> container):
 #   rocketchat:  3000 -> 3000
 #   mongo:      27017 -> 27017
-#   postgres:    5433 -> 5432    (non-default di host, menghindari konflik)
-#   redis:       6380 -> 6379    (non-default di host, menghindari konflik)
+#   postgres:    5433 -> 5432    (non-default on host to avoid conflicts)
+#   redis:       6380 -> 6379    (non-default on host to avoid conflicts)
 #   mem0-api:    4100 -> 4100
 # ==============================================================================
 

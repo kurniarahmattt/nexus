@@ -1,0 +1,84 @@
+name: Bug report
+description: Something doesn't work as expected.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! Please fill in the sections below so the
+        issue can be reproduced and triaged quickly. **For security
+        vulnerabilities, please use [SECURITY.md](../SECURITY.md) instead
+        of this form.**
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the bug.
+      placeholder: e.g. Gateway crashes when a bot is mentioned in a thread reply.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that reliably trigger the bug.
+      placeholder: |
+        1. `make up`
+        2. `make services-up`
+        3. Open Rocket.Chat at http://localhost:3000 and create a thread.
+        4. Mention `@claude` from inside the thread.
+        5. Observe the gateway crash.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include logs / error messages if useful.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: nexus-version
+    attributes:
+      label: Nexus version (commit SHA)
+      description: Output of `git rev-parse HEAD` from your nexus checkout.
+      placeholder: 4f1da28
+    validations:
+      required: true
+  - type: input
+    id: bun-version
+    attributes:
+      label: Bun version
+      description: Output of `bun --version`.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: input
+    id: docker-version
+    attributes:
+      label: Docker version
+      description: Output of `docker --version`.
+      placeholder: "Docker version 27.x"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Ubuntu 24.04 / macOS 15.4 / Windows 11 (WSL2)
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help — config snippets, screenshots, related issues.

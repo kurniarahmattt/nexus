@@ -2,9 +2,9 @@
 -- N.E.X.U.S — Initial Schema
 -- Ref: PLANNING.md §5.1
 -- ============================================================================
--- Catatan: file ini di-mount ke /docker-entrypoint-initdb.d/ pada container
--- Postgres pertama kali start. Untuk migrasi incremental nanti (Phase 1+)
--- pakai db/migrate.sh.
+-- Note: this file is mounted at /docker-entrypoint-initdb.d/ on the
+-- Postgres container's first start. For incremental migrations after
+-- that (Phase 1+), use db/migrate.sh.
 -- ============================================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -12,7 +12,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ============================================================================
--- Identitas & Scoping
+-- Identity & Scoping
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS projects (
   slug            TEXT UNIQUE NOT NULL,
   display_name    TEXT NOT NULL,
   description     TEXT,
-  workspace_path  TEXT,  -- relatif terhadap NEXUS_WORKSPACE_ROOT
+  workspace_path  TEXT,  -- relative to NEXUS_WORKSPACE_ROOT
   metadata        JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS agents (
   id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   slug              TEXT UNIQUE NOT NULL,           -- 'claude', 'hermes', ...
   display_name      TEXT NOT NULL,
-  cli_command       TEXT NOT NULL,                  -- binary name atau absolute path
+  cli_command       TEXT NOT NULL,                  -- binary name or absolute path
   cli_args          JSONB NOT NULL DEFAULT '[]'::jsonb,
-  rocketchat_bot_id TEXT UNIQUE,                    -- diisi saat bootstrap
+  rocketchat_bot_id TEXT UNIQUE,                    -- populated at bootstrap
   rocketchat_username TEXT UNIQUE NOT NULL,         -- 'claude', 'hermes'
   config            JSONB NOT NULL DEFAULT '{}'::jsonb,
   enabled           BOOLEAN NOT NULL DEFAULT true,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   rocketchat_rid TEXT UNIQUE NOT NULL,
   kind           TEXT NOT NULL CHECK (kind IN ('channel','private','dm')),
-  name           TEXT,                              -- NULL untuk DM
+  name           TEXT,                              -- NULL for DM
   project_id     UUID REFERENCES projects(id) ON DELETE SET NULL,
   metadata       JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS messages (
   room_id          UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   sender_user_id   UUID REFERENCES users(id)  ON DELETE SET NULL,
   sender_agent_id  UUID REFERENCES agents(id) ON DELETE SET NULL,
-  thread_parent_mid TEXT,                           -- rocketchat parent mid kalau reply di thread
+  thread_parent_mid TEXT,                           -- rocketchat parent mid when this is a thread reply
   text             TEXT,
   metadata         JSONB NOT NULL DEFAULT '{}'::jsonb,
   ts               TIMESTAMPTZ NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS landmarks (
   room_id     UUID NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
   kind        TEXT NOT NULL CHECK (kind IN ('decision','spec','code','link','question','action_item')),
   reason      TEXT,
-  extracted_by TEXT,                                -- 'heuristic' atau 'llm'
+  extracted_by TEXT,                                -- 'heuristic' or 'llm'
   pinned_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (message_id, kind)
 );
@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_landmarks_room ON landmarks (room_id, pinned_at D
 CREATE TABLE IF NOT EXISTS facts (
   id                BIGSERIAL PRIMARY KEY,
   scope_kind        TEXT NOT NULL CHECK (scope_kind IN ('user','project','room','global')),
-  scope_id          UUID,                           -- NULL kalau scope='global'
+  scope_id          UUID,                           -- NULL when scope='global'
   key               TEXT NOT NULL,
   value             JSONB NOT NULL,
   source_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
@@ -159,8 +159,8 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 CREATE TABLE IF NOT EXISTS room_tool_acl (
   room_id        UUID REFERENCES rooms(id) ON DELETE CASCADE,
   mcp_server_id  UUID REFERENCES mcp_servers(id) ON DELETE CASCADE,
-  allowed_tools  TEXT[],                            -- NULL = semua tool di server diizinkan
-  require_approval TEXT[],                          -- list tool yang butuh approval UIKit
+  allowed_tools  TEXT[],                            -- NULL = all tools on the server are allowed
+  require_approval TEXT[],                          -- tools that require UIKit approval
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (room_id, mcp_server_id)
 );
@@ -182,7 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log (ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_log (event_type, ts DESC);
 
 -- ============================================================================
--- Schema version tracking (untuk migrasi inkremental nanti)
+-- Schema version tracking (for future incremental migrations)
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS schema_migrations (

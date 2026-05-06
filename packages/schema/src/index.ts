@@ -1,5 +1,5 @@
 /**
- * Shared types & zod schemas untuk semua service N.E.X.U.S.
+ * Shared types & zod schemas for all N.E.X.U.S services.
  */
 
 import { z } from "zod";

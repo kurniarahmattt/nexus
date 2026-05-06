@@ -62,8 +62,8 @@ const worker = new Worker<ExecuteJob, { messageId: string }>(
     if (!creds) {
       // No bot auth_token — can't post as bot. Surface via admin fallback.
       const msg =
-        `⚠️ \`@${data.agentSlug}\` tidak bisa merespons — credentials belum ter-setup. ` +
-        "Jalankan `make bootstrap` untuk capture token bot.";
+        `⚠️ \`@${data.agentSlug}\` cannot respond — credentials are not set up. ` +
+        "Run `make bootstrap` to capture the bot's auth token.";
       await postFallback(data.rocketchatRid, msg).catch(() => undefined);
       throw new Error(`missing_credentials:${data.agentSlug}`);
     }

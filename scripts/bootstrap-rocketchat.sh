@@ -2,12 +2,12 @@
 # ============================================================================
 # scripts/bootstrap-rocketchat.sh
 # ============================================================================
-# Phase 0: setelah Rocket.Chat up, panggil REST API untuk:
-#   1. Login admin (credential dari .env)
-#   2. Buat bot user @claude dan @hermes
-#   3. (Opsional) Buat room test #nexus-test dan invite kedua bot
-#   4. Tulis rocketchat_bot_id kembali ke Postgres (tabel agents)
-# Idempoten — aman dijalankan berkali-kali.
+# Phase 0: once Rocket.Chat is up, call its REST API to:
+#   1. Log in as admin (credentials from .env)
+#   2. Create the @claude and @hermes bot users
+#   3. (Optional) Create the #nexus-test room and invite both bots
+#   4. Write rocketchat_bot_id back to Postgres (the agents table)
+# Idempotent — safe to run multiple times.
 # ============================================================================
 
 set -euo pipefail

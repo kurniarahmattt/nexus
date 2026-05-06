@@ -1,0 +1,62 @@
+name: Feature request
+description: Propose a new capability or improvement.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please describe the problem first, then
+        the proposed solution. Features that conflict with the goals in
+        [PLANNING.md](../PLANNING.md) may be closed with a pointer to that
+        document — please skim it first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the user-visible problem, not the solution. Who hits this and when?
+      placeholder: |
+        When a developer joins a team that already has Nexus running, they
+        currently have to ask the host admin to manually run
+        `make create-bridge`. This is a friction point for self-onboarding.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A concrete shape for the feature. Bullet points are fine.
+      placeholder: |
+        - Add a CLI subcommand `nexus-bridge register --invite <token>` that
+          creates the bridge config and bot user from a one-time invite token.
+        - Admin generates the invite via the Web UI; token expires in 24h.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you consider, and why did you reject them?
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / out-of-scope
+      description: What is explicitly NOT part of this proposal? Helps reviewers focus.
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated complexity
+      options:
+        - "Small (a few hours)"
+        - "Medium (a day or two)"
+        - "Large (a week+)"
+        - "Not sure"
+      default: 3
+  - type: checkboxes
+    id: willing-to-help
+    attributes:
+      label: Are you willing to help?
+      options:
+        - label: I can write a draft PR.
+        - label: I can test a draft PR.
+        - label: I can write documentation for this feature.
