@@ -148,6 +148,11 @@ bridge tokens and cookies aren't sniffable.
 
 ## Quick Start
 
+> **Tip:** if you have an AI assistant on this machine (Claude Code,
+> Cursor, Gemini CLI), you can hand it [docs/AGENT-SETUP.md](docs/AGENT-SETUP.md)
+> and let it walk you through the setup. The file is written as a
+> structured prompt for any AI agent.
+
 Requires Docker, Bun, tmux, and ~6 GB free RAM for the stack.
 
 ```bash
@@ -293,6 +298,9 @@ The compose file resolves `${VAR:-default}` for everything, so a real
   log. The source of truth for design decisions.
 - [docs/BRIDGES.md](docs/BRIDGES.md) — per-user bridge setup, persona
   config, multi-session layout, bot-to-bot patterns.
+- [docs/AGENT-SETUP.md](docs/AGENT-SETUP.md) — agent-oriented setup brief.
+  Hand this file to your local AI assistant (Claude Code / Cursor /
+  Gemini) and it will install Nexus or wire up your bridge for you.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to send patches, what's in
   scope, code style.
 - [SECURITY.md](SECURITY.md) — how to report vulnerabilities (privately,
