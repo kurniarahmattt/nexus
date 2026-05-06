@@ -29,7 +29,10 @@ import {
 } from "./rc.ts";
 import { isBridgeConnected } from "../bridge.ts";
 
-const r = new Hono();
+// Variables typed so c.get("session") returns SessionPayload directly,
+// without needing a per-call `as SessionPayload` cast.
+type AppVariables = { session: SessionPayload };
+const r = new Hono<{ Variables: AppVariables }>();
 
 // Allow the Vite dev server to hit the gateway directly.
 r.use(

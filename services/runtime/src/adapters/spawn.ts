@@ -36,9 +36,8 @@ export async function runProcess(
   });
 
   if (opts.stdin !== undefined && proc.stdin) {
-    const writer = proc.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(opts.stdin));
-    await writer.close();
+    proc.stdin.write(opts.stdin);
+    proc.stdin.end();
   }
 
   // Collect stdout + stderr, batch chunk notifications.

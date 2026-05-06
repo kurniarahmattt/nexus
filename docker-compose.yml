@@ -85,7 +85,9 @@ services:
     volumes:
       - rocketchat-uploads:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/info > /dev/null || exit 1"]
+      # Use Node (always present in this image) instead of curl/wget which
+      # are NOT installed in rocket.chat:6.13.1.
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/info', r => process.exit(r.statusCode===200?0:1)).on('error', () => process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 20

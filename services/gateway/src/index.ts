@@ -275,9 +275,11 @@ async function flushToInvokeQueue(data: PendingFlush): Promise<void> {
       triggerMessageId: data.triggerMessageId,
       triggerUserId: data.userId,
       triggerUsername: data.username,
+      triggerKind: "user",
       text: cleaned,
       rawText: data.combinedText,
       triggeredAt: data.firstTs,
+      hop: 0,
     };
     await invokeQueue.add(`invoke:${agent.slug}`, job, {
       removeOnComplete: 1000,
@@ -319,7 +321,7 @@ log.info({ port: env.GATEWAY_PORT }, "nexus-gateway listening");
 // Bun.serve with WebSocket upgrade for /bridge.
 export default {
   port: env.GATEWAY_PORT,
-  fetch(req: Request, server: import("bun").Server) {
+  fetch(req: Request, server: import("bun").Server<unknown>) {
     const url = new URL(req.url);
     if (url.pathname === "/bridge") {
       const ok = server.upgrade(req, { data: { slug: null } });
