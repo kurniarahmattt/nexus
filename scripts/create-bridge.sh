@@ -9,7 +9,7 @@
 #   4. Updates outgoing integration triggerWords to include the new slug.
 #
 # Usage:
-#   scripts/create-bridge.sh --user rahmat --cwd /home/rahmat/coding/backend --cli claude
+#   scripts/create-bridge.sh --user alice --cwd /home/alice/coding/backend --cli claude
 # ============================================================================
 
 set -euo pipefail
@@ -84,7 +84,7 @@ TOK=$(echo "$login_resp" | grep -oP '"authToken"\s*:\s*"\K[^"]+')
 ADMIN_ID=$(echo "$login_resp" | grep -oP '"userId"\s*:\s*"\K[^"]+')
 
 # ---- 1. Ensure user row in Postgres ----
-# We don't have a RC user for the person (rahmat/ilham are human users who
+# We don't have a RC user for the person (alice/bob are human users who
 # already exist in RC with their own accounts). Just ensure a 'users' row;
 # find by username first, upsert if missing.
 USER_EXISTS=$(docker exec "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -At \

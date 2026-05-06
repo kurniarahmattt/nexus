@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 # scripts/invite-bot.sh — invite a Nexus bot user to a channel.
-# Usage: scripts/invite-bot.sh --slug claude-rahmat-backend --channel project-nexus
+# Usage: scripts/invite-bot.sh --slug claude-alice-backend --channel project-nexus
 # ============================================================================
 
 set -euo pipefail

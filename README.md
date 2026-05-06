@@ -34,30 +34,30 @@ terminate.
 
 A 3-dev team building a product:
 
-| Developer | AI Partner (bridge slug)         | Workspace on their laptop |
-|-----------|----------------------------------|---------------------------|
-| Rahmat    | `@claude-rahmat-backend`         | `~/work/api/`             |
-| Ilham     | `@claude-ilham-frontend`         | `~/work/web/`             |
-| Sari      | `@cursor-sari-infra`             | `~/work/deploy/`          |
+| Developer | AI Partner (bridge slug) | Workspace on their laptop |
+|-----------|--------------------------|---------------------------|
+| Alice     | `@claude-alice-backend`  | `~/work/api/`             |
+| Bob       | `@claude-bob-frontend`   | `~/work/web/`             |
+| Carol     | `@cursor-carol-infra`    | `~/work/deploy/`          |
 
 All three connect to one Nexus channel `#project-launch`. Then in chat:
 
 ```
-Rahmat:                 @claude-rahmat-backend can you summarize our
+Alice:                 @claude-alice-backend can you summarize our
                         current /v1/orders endpoints for the frontend?
 
-@claude-rahmat-backend: [reads ~/work/api/, replies with 4 endpoints
+@claude-alice-backend: [reads ~/work/api/, replies with 4 endpoints
                         + payload examples]
-                        cc @claude-ilham-frontend — please align the
+                        cc @claude-bob-frontend — please align the
                         order summary card with these fields.
 
-@claude-ilham-frontend: [auto-dispatched, reads ~/work/web/, replies]
+@claude-bob-frontend: [auto-dispatched, reads ~/work/web/, replies]
                         Got it. The summary card currently uses
                         `total_cents`; I'll switch to `total` per the
-                        new schema. Will need @cursor-sari-infra to
+                        new schema. Will need @cursor-carol-infra to
                         bump the API version in staging.
 
-@cursor-sari-infra:     [auto-dispatched, reads ~/work/deploy/, replies]
+@cursor-carol-infra:     [auto-dispatched, reads ~/work/deploy/, replies]
                         Bumped staging to v1.4. Smoke check passing.
 ```
 
@@ -69,7 +69,7 @@ default) so chains always terminate.
 
 ```
 ┌──────────────────────────┐  ┌──────────────────────────┐  ┌──────────────────────────┐
-│  Rahmat's laptop         │  │  Ilham's laptop          │  │  Sari's laptop           │
+│  Alice's laptop          │  │  Bob's laptop            │  │  Carol's laptop          │
 │  ~/work/api              │  │  ~/work/web              │  │  ~/work/deploy           │
 │  ┌─────────────────────┐ │  │  ┌─────────────────────┐ │  │  ┌─────────────────────┐ │
 │  │ claude (CLI)        │ │  │  │ claude (CLI)        │ │  │  │ cursor-agent (CLI)  │ │
@@ -149,8 +149,8 @@ Three steps. Detailed walkthrough: [docs/BRIDGES.md](docs/BRIDGES.md).
 **1. Admin provisions the bridge** (on the Nexus host):
 
 ```bash
-make create-bridge USER=rahmat NAME=backend CLI=claude \
-  CWD=/home/rahmat/work/api
+make create-bridge USER=alice NAME=backend CLI=claude \
+  CWD=/home/alice/work/api
 ```
 
 Prints a slug, a token, and a config template at `bridges/<slug>.json`.
@@ -174,11 +174,11 @@ re-announces identity on every reconnect.
 **4. Invite the bot to a channel**:
 
 ```bash
-make invite-bot SLUG=claude-rahmat-backend CHANNEL=project-launch
+make invite-bot SLUG=claude-alice-backend CHANNEL=project-launch
 ```
 
-Mention `@claude-rahmat-backend` in `#project-launch` — the bridge picks it
-up, runs the prompt locally on Rahmat's laptop with full workspace access,
+Mention `@claude-alice-backend` in `#project-launch` — the bridge picks it
+up, runs the prompt locally on Alice's laptop with full workspace access,
 and replies in the channel.
 
 ## Multi-developer collaboration walkthrough
@@ -198,7 +198,7 @@ Tips for personas that participate in peer chains:
 
 - Add "keep replies short to terminate bot-to-bot hops" to the persona.
 - Be explicit about each bot's domain ("you own backend; defer infra
-  questions to @cursor-sari-infra").
+  questions to @cursor-carol-infra").
 - Bridges work over LAN by default — for off-LAN devs, front the gateway
   with a TLS reverse proxy (caddy/nginx) and use `wss://`.
 

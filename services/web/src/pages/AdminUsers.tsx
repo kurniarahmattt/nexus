@@ -63,7 +63,7 @@ export default function AdminUsers() {
               onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })}
               required
               className="w-full border rounded px-3 py-2 text-sm font-mono"
-              placeholder="ilhamdev"
+              placeholder="alicedev"
             />
           </label>
           <label className="flex-1">
@@ -75,7 +75,7 @@ export default function AdminUsers() {
               onChange={(e) => setForm({ ...form, display_name: e.target.value })}
               required
               className="w-full border rounded px-3 py-2 text-sm"
-              placeholder="Ilham Dev"
+              placeholder="Alice Dev"
             />
           </label>
           <button

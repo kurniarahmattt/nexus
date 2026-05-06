@@ -211,7 +211,7 @@ NEXUS_BRIDGE_TOKEN=${result.bridge_token} \\
             value={cwd}
             onChange={(e) => setCwd(e.target.value)}
             required
-            placeholder="/home/rahmat/coding/nexus/backend"
+            placeholder="/home/alice/coding/nexus/backend"
             className="w-full border rounded px-3 py-2 text-sm font-mono"
           />
         </Field>

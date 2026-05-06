@@ -233,7 +233,7 @@ async function maybeHop(args: {
   }
   const bots = await allBots();
   // Match longest-first with word boundary — prevents @claude matching in
-  // @claude-rahmat/@claude-ilham.
+  // @claude-alice/@claude-bob.
   const sorted = [...bots].sort(
     (a, b) => b.rocketchat_username.length - a.rocketchat_username.length,
   );

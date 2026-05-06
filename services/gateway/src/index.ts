@@ -41,8 +41,8 @@ async function refreshAgents() {
 }
 
 // Match @<username> with a non-[A-Za-z0-9_-] boundary after it, so that
-// `@claude-rahmat` does NOT also match `@claude`. Sort by username length
-// descending so longer slugs like `claude-rahmat` are preferred when they
+// `@claude-alice` does NOT also match `@claude`. Sort by username length
+// descending so longer slugs like `claude-alice` are preferred when they
 // overlap a shorter one.
 function detectTriggeredAgents(text: string): AgentRow[] {
   const sorted = [...agentCache].sort(
