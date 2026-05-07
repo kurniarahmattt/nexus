@@ -26,7 +26,7 @@ ask()   { printf "  ${C_BLUE}?${C_RESET} %s " "$*"; }
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-TOTAL_STEPS=6
+TOTAL_STEPS=7
 
 # ---- header -----------------------------------------------------------------
 
@@ -86,61 +86,24 @@ else
   warn "memory: less than 6 GB; Rocket.Chat may be slow"
 fi
 
-# Port availability — fail-fast BEFORE we mutate any state. If any port
-# is taken, the stack will die later with EADDRINUSE; better to catch it
-# now while .env hasn't been generated and Docker hasn't pulled images.
+# Port helper — used by step 3. ss is on most modern Linux distros; nc
+# and bash /dev/tcp are universal fallbacks.
 port_in_use() {
-  # ss is on most modern Linux distros; nc is the universal fallback.
   if command -v ss >/dev/null 2>&1; then
     ss -tlnH 2>/dev/null | awk '{print $4}' | grep -E ":${1}\$" >/dev/null
   elif command -v nc >/dev/null 2>&1; then
     nc -z 127.0.0.1 "$1" >/dev/null 2>&1
   else
-    # Fallback: bash /dev/tcp probe (always available with bash 4+)
     (echo > "/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1
   fi
 }
 
-declare -A NEXUS_PORTS=(
-  [3000]="Rocket.Chat"
-  [27017]="MongoDB"
-  [5433]="Postgres"
-  [6380]="Redis"
-  [4100]="mem0-api"
-  [4000]="nexus-gateway"
-  [4001]="nexus-composer"
-  [4002]="nexus-runtime"
-)
-
-port_conflicts=()
-for port in "${!NEXUS_PORTS[@]}"; do
-  if port_in_use "$port"; then
-    port_conflicts+=("$port (${NEXUS_PORTS[$port]})")
-  fi
-done
-
-if [ ${#port_conflicts[@]} -gt 0 ]; then
-  echo
-  err "ports already in use: ${port_conflicts[*]}"
-  cat <<EOF
-
-  These ports must be free before the wizard continues. Find what's
-  holding each port and either stop it or move it to a different port.
-
-  Quick diagnostic:
-    ss -tlnp | grep -E ':(3000|27017|5433|6380|4100|4000|4001|4002)\b'
-
-  Common culprits:
-    • Old Nexus stack still running         → ${C_CYAN}make services-down && make down${C_RESET}
-    • Local Postgres on 5432 (mapped here)  → stop the local pg or change POSTGRES_PORT
-    • Other dev servers using 4000/4001     → stop them or move them
-
-  Re-run ${C_CYAN}nexus host-onboard${C_RESET} once the ports are clear.
-
-EOF
-  exit 1
-fi
-ok "all required ports are free"
+# Find next free port starting from $1, advancing by $2 (default 1).
+find_free_port() {
+  local p=$1 step=${2:-1}
+  while port_in_use "$p"; do p=$((p + step)); done
+  printf '%s' "$p"
+}
 
 # ---- step 2: .env -----------------------------------------------------------
 
@@ -259,15 +222,120 @@ case "$existing_llm_key" in
   *) ok "MEM0_LLM_API_KEY (existing value preserved)" ;;
 esac
 
-# ---- step 3: install --------------------------------------------------------
+# ---- step 3: port reconciliation -------------------------------------------
+# We do this AFTER the .env is in place so we can read the configured
+# values, prompt the user to relocate any that clash with another
+# process on this machine, and write back the chosen ports — including
+# the URLs that depend on them (DATABASE_URL, REDIS_URL, MEM0_API_URL,
+# ROCKETCHAT_URL, NEXUS_PUBLIC_URL).
+#
+# This is non-destructive to other projects running on the host: we
+# only ever change the port Nexus uses, never kill or move someone
+# else's process.
 
-step 3 "Installing JS dependencies"
+step 3 "Reconciling host ports"
+
+# Maps a Nexus role to its .env key + sensible default + step size.
+# We probe in this order; each role's chosen port is written back to .env.
+declare -a PORT_KEYS=(GATEWAY_PORT COMPOSER_PORT RUNTIME_PORT
+                      MEM0_HOST_PORT POSTGRES_HOST_PORT REDIS_HOST_PORT
+                      MONGO_HOST_PORT ROCKETCHAT_HOST_PORT)
+declare -A PORT_LABEL=(
+  [GATEWAY_PORT]="nexus-gateway"
+  [COMPOSER_PORT]="nexus-composer"
+  [RUNTIME_PORT]="nexus-runtime"
+  [MEM0_HOST_PORT]="mem0-api"
+  [POSTGRES_HOST_PORT]="Postgres"
+  [REDIS_HOST_PORT]="Redis"
+  [MONGO_HOST_PORT]="MongoDB"
+  [ROCKETCHAT_HOST_PORT]="Rocket.Chat"
+)
+declare -A PORT_DEFAULT=(
+  [GATEWAY_PORT]=4000  [COMPOSER_PORT]=4001  [RUNTIME_PORT]=4002
+  [MEM0_HOST_PORT]=4100
+  [POSTGRES_HOST_PORT]=5433  [REDIS_HOST_PORT]=6380  [MONGO_HOST_PORT]=27017
+  [ROCKETCHAT_HOST_PORT]=3000
+)
+# Step sizes give us pleasant rollovers (4000 → 4010 → 4020).
+declare -A PORT_STEP=(
+  [GATEWAY_PORT]=10  [COMPOSER_PORT]=10  [RUNTIME_PORT]=10
+  [MEM0_HOST_PORT]=10
+  [POSTGRES_HOST_PORT]=10  [REDIS_HOST_PORT]=10  [MONGO_HOST_PORT]=10
+  [ROCKETCHAT_HOST_PORT]=10
+)
+
+declare -A PICKED_PORT
+any_relocation=false
+
+for key in "${PORT_KEYS[@]}"; do
+  cur="$(current_env "$key")"
+  cur="${cur:-${PORT_DEFAULT[$key]}}"
+  label="${PORT_LABEL[$key]}"
+  if port_in_use "$cur"; then
+    suggested="$(find_free_port $((cur + ${PORT_STEP[$key]})) ${PORT_STEP[$key]})"
+    warn "$label port $cur is in use by another process"
+    ask "Move Nexus's $label to $suggested instead? [Y/n]"
+    read -r ans
+    case "${ans:-Y}" in
+      n|N|no|NO)
+        err "cannot continue while $cur is taken; free it manually and re-run."
+        exit 1
+        ;;
+      *)
+        set_env "$key" "$suggested"
+        PICKED_PORT[$key]="$suggested"
+        ok "$key=$suggested"
+        any_relocation=true
+        ;;
+    esac
+  else
+    PICKED_PORT[$key]="$cur"
+    ok "$label port $cur is free"
+  fi
+done
+
+# Re-derive URLs that embed any of the ports we just settled.
+if [ "$any_relocation" = "true" ]; then
+  info "re-deriving URLs in .env to match the new ports..."
+
+  pg_user="$(current_env POSTGRES_USER)"; pg_user="${pg_user:-nexus}"
+  pg_db="$(current_env POSTGRES_DB)"; pg_db="${pg_db:-nexus}"
+  pg_pw="$(current_env POSTGRES_PASSWORD)"
+  set_env DATABASE_URL "postgresql://${pg_user}:${pg_pw}@localhost:${PICKED_PORT[POSTGRES_HOST_PORT]}/${pg_db}"
+  ok "DATABASE_URL updated"
+
+  set_env REDIS_URL "redis://localhost:${PICKED_PORT[REDIS_HOST_PORT]}"
+  ok "REDIS_URL updated"
+
+  set_env MEM0_API_URL "http://localhost:${PICKED_PORT[MEM0_HOST_PORT]}"
+  ok "MEM0_API_URL updated"
+
+  set_env ROCKETCHAT_URL "http://localhost:${PICKED_PORT[ROCKETCHAT_HOST_PORT]}"
+  ok "ROCKETCHAT_URL updated"
+
+  # Update NEXUS_PUBLIC_URL only if it currently points at localhost
+  # (with a port suffix). For prod URLs (https://nexus.example.com),
+  # we leave it alone — the admin pre-set that and the gateway port
+  # behind a reverse proxy is already the proxy's choice.
+  cur_pub="$(current_env NEXUS_PUBLIC_URL)"
+  case "$cur_pub" in
+    *localhost:[0-9]*)
+      new_pub=$(printf '%s' "$cur_pub" | sed -E "s|:[0-9]+\$|:${PICKED_PORT[GATEWAY_PORT]}|")
+      set_env NEXUS_PUBLIC_URL "$new_pub"
+      ok "NEXUS_PUBLIC_URL=$new_pub"
+      ;;
+  esac
+fi
+
+# ---- step 4: install --------------------------------------------------------
+
+step 4 "Installing JS dependencies"
 bun install --silent
 ok "dependencies installed"
 
-# ---- step 4: docker stack ---------------------------------------------------
+# ---- step 5: docker stack ---------------------------------------------------
 
-step 4 "Starting docker stack"
+step 5 "Starting docker stack"
 docker compose up -d 2>&1 | sed 's/^/  /'
 info "waiting for Rocket.Chat to become healthy (up to ~90s)..."
 for i in $(seq 1 45); do
@@ -285,47 +353,51 @@ if [ "$(docker inspect nexus-rocketchat --format '{{.State.Health.Status}}' 2>/d
   exit 1
 fi
 
-# ---- step 5: host services --------------------------------------------------
+# ---- step 6: host services --------------------------------------------------
 
-step 5 "Starting host services (gateway / composer / runtime)"
+step 6 "Starting host services (gateway / composer / runtime)"
 if tmux has-session -t nexus 2>/dev/null; then
   warn "tmux session 'nexus' already exists — leaving it as-is"
 else
   make services-up 2>&1 | sed 's/^/  /'
 fi
-info "waiting for runtime to respond..."
+runtime_port="${PICKED_PORT[RUNTIME_PORT]:-4002}"
+info "waiting for runtime to respond on :${runtime_port}..."
 for i in $(seq 1 30); do
-  if curl -fsS --max-time 2 http://localhost:4002/health >/dev/null 2>&1; then
+  if curl -fsS --max-time 2 "http://localhost:${runtime_port}/health" >/dev/null 2>&1; then
     ok "host services responding"
     break
   fi
   sleep 1
 done
 
-# ---- step 6: bootstrap ------------------------------------------------------
+# ---- step 7: bootstrap ------------------------------------------------------
 
-step 6 "Bootstrapping Rocket.Chat (admin user, bots, test channel)"
+step 7 "Bootstrapping Rocket.Chat (admin user, bots, test channel)"
 make bootstrap 2>&1 | sed 's/^/  /'
 
 # ---- done -------------------------------------------------------------------
+
+rc_port="${PICKED_PORT[ROCKETCHAT_HOST_PORT]:-3000}"
+gw_port="${PICKED_PORT[GATEWAY_PORT]:-4000}"
 
 cat <<EOF
 
 ${C_GREEN}${C_BOLD}✓ Nexus is up.${C_RESET}
 
   ${C_BOLD}Next steps:${C_RESET}
-  • Open ${C_CYAN}http://localhost:3000${C_RESET}
+  • Open ${C_CYAN}http://localhost:${rc_port}${C_RESET}
     Admin login printed in the bootstrap output above.
   • Test:  in the #nexus-test channel, type ${C_CYAN}@claude hello${C_RESET}
   • Status anytime:  ${C_CYAN}make health${C_RESET} / ${C_CYAN}make services-status${C_RESET}
   • Logs:  ${C_CYAN}make logs${C_RESET}
 
-  ${C_BOLD}Onboard a teammate's AI:${C_RESET}
-    make create-bridge USER=<their-username> NAME=<role> CLI=claude \\
-      CWD=/path/on/their/laptop
+  ${C_BOLD}Onboard a teammate's AI (issue an invite URL):${C_RESET}
+    make issue-invite USER=<their-username> CHANNELS=<channel-name>
 
-  Send them the printed slug, token, config file, and your gateway URL
-  (ws://<this-host>:4000/bridge). Point them at:
-  https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge
+  Point them at:
+    https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge
+
+  Your gateway URL:  ws://<this-host>:${gw_port}/bridge
 
 EOF
