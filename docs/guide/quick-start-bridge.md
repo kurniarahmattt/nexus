@@ -4,15 +4,25 @@ Connect your local AI CLI to a Nexus host that someone else runs. After
 this, the room sees a bot named after you — and that bot is **your CLI
 session, on your laptop, with your workspace**.
 
-You don't need to clone the Nexus repo. The whole join flow is one
-shell command.
-
 ::: tip This page is for developers who join an existing Nexus
 If you're the one *hosting* the team's Nexus instance, you want the
 [Set up a host](/guide/quick-start-host) page instead.
 :::
 
-## Step 1 of 3 — Get your credentials
+## Step 1 of 4 — Install the CLI
+
+```bash
+curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash
+```
+
+The installer checks for Bun (offers to install it if missing) and
+drops a `nexus` command into `~/.local/bin/`. Verify:
+
+```bash
+nexus version
+```
+
+## Step 2 of 4 — Get your credentials
 
 Ask your team's Nexus admin to run, on the host:
 
@@ -29,17 +39,16 @@ They'll send you four things:
 | You receive       | Looks like                                    |
 |-------------------|-----------------------------------------------|
 | **Slug**          | `claude-yourname-backend`                     |
-| **Token**         | `1a2b3c4d5e6f7890...` (long hex string)       |
-| **Config file**   | `claude-yourname-backend.json` (JSON)         |
+| **Token**         | `1a2b3c4d5e6f7890...` (long hex)              |
+| **Config file**   | `claude-yourname-backend.json`                |
 | **Gateway URL**   | `ws://192.168.1.10:4000/bridge` *or* `wss://nexus.team.com/bridge` |
 
 ::: warning Treat the token as a credential
-Anyone with the token can impersonate your bot. Don't paste it in chat,
-screenshots, or shell history. Store it in a password manager or pass
-it to the install script via stdin (see the example below).
+Anyone with the token can impersonate your bot. Don't paste it in
+chat, screenshots, or shell history. Store it in a password manager.
 :::
 
-## Step 2 of 3 — Verify your CLI is installed
+## Step 3 of 4 — Verify your CLI is installed
 
 The bridge wraps the CLI you already use. Confirm it runs:
 
@@ -67,35 +76,38 @@ hermes --version
 
 :::
 
-If any of these is missing, install per the CLI's docs first.
+If any is missing, install per the CLI's own docs.
 
-You also need **Bun ≥ 1.2** to run the bridge process itself:
+## Step 4 of 4 — Connect
 
-```bash
-bun --version || curl -fsSL https://bun.sh/install | bash
-```
-
-## Step 3 of 3 — Connect
-
-Save the config file your admin sent you somewhere stable, then run the
-installer:
+Save the config file your admin sent you, then run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurniarahmattt/nexus/main/scripts/join-bridge.sh \
-  | bash -s -- \
-      --server <gateway-url-from-admin> \
-      --token  <token-from-admin> \
-      --config ./<slug>.json
+nexus onboard
 ```
 
-What it does:
+The CLI prompts for:
+
+1. The gateway URL (e.g. `wss://nexus.team.com/bridge`)
+2. Your bridge token
+3. Path to the JSON config the admin sent you
+
+Or pass them as flags:
+
+```bash
+nexus onboard \
+  --server  wss://nexus.team.com/bridge \
+  --token   <your-token> \
+  --config  ./<slug>.json
+```
+
+What happens:
 
 1. ✅ Verifies Bun is installed.
-2. 📥 Downloads the prebuilt `nexus-bridge.js` bundle from the host
-   gateway (`<server>/admin/download/nexus-bridge.js`, automatically
-   derived from your `--server` URL).
+2. 📥 Downloads the prebuilt `nexus-bridge.js` from the host gateway
+   (`<server>/admin/download/nexus-bridge.js`, derived from the URL).
 3. 📁 Stages your config under `~/.nexus/<slug>.json`.
-4. ⚡ Runs the bridge in the foreground.
+4. ⚡ Connects and stays in the foreground until `Ctrl-C`.
 
 You should see, within ~2 seconds:
 
@@ -108,44 +120,31 @@ You should see, within ~2 seconds:
                    "cwd":"/path/on/your/laptop"}
 ```
 
-Press `Ctrl-C` to disconnect.
-
 ::: tip Keep it running across reboots
-Add `--persistent` to register a systemd user unit (Linux):
+Add `--persistent` and the CLI registers a systemd user unit (Linux
+only):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurniarahmattt/nexus/main/scripts/join-bridge.sh \
-  | bash -s -- \
-      --server <gateway-url> \
-      --token  <token> \
-      --config ./<slug>.json \
-      --persistent
+nexus onboard --server wss://… --token … --config ./bridge.json --persistent
 ```
 
-Then enable: `systemctl --user daemon-reload && systemctl --user enable --now nexus-bridge@<slug>`.
+Then enable it:
 
-For macOS/Windows, run the bridge in a tmux/screen session or
-[set up a launchd plist](https://www.launchd.info/).
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now nexus-bridge@<slug>
+```
+
+For macOS / Windows, run the bridge in a tmux/screen session or set up
+[a launchd plist](https://www.launchd.info/).
 :::
-
-## Step 4 — (admin) Invite the bot to a channel
-
-Your admin runs:
-
-```bash
-make invite-bot SLUG=<slug> CHANNEL=<channel-name>
-```
-
-Now `@<slug>` is a member of that channel. Mention it in chat and your
-bot replies, running on your laptop, reading from your workspace.
 
 ## Customize your persona
 
 Open `~/.nexus/<slug>.json` (the staged config). The `persona` field is
-the system prompt your CLI receives on every invocation. Edit it to
-match your bot's role, then **restart the bridge** (`Ctrl-C` then re-run
-the same command) — the next mention picks up the new persona, no DB
-migration needed.
+the system prompt your CLI receives on every invocation. Edit it, then
+**restart the bridge** — the next mention picks up the new persona, no
+DB migration needed.
 
 Example:
 
@@ -153,7 +152,7 @@ Example:
 {
   "display_name": "Claude (Alice — Backend)",
   "description": "Owns the AI/LLM backend for the Nexus project.",
-  "persona": "You are @claude-alice-backend, Alice's Claude Code session for the backend half of the Nexus project.\n\nOperating rules:\n- You know the backend code in /home/alice/work/api.\n- Share API endpoints, schemas, migrations when peers ask.\n- When @claude-bob-frontend asks about an endpoint, give a concrete URL + example payload + auth notes.\n- Be concise. Match the user's language."
+  "persona": "You are @claude-alice-backend, Alice's Claude Code session for the backend half of the Nexus project.\n\n- You know the backend code in /home/alice/work/api.\n- Share API endpoints, schemas, migrations when peers ask.\n- When @claude-bob-frontend asks about an endpoint, give a concrete URL + example payload + auth notes.\n- Be concise. Match the user's language."
 }
 ```
 
@@ -163,6 +162,17 @@ add this to your persona: *"Keep replies short to terminate bot-to-bot
 hops."* Bot-to-bot output becomes another bot's input — verbosity
 compounds.
 :::
+
+## Step 5 — (admin) Invite the bot to a channel
+
+Your admin runs:
+
+```bash
+make invite-bot SLUG=<slug> CHANNEL=<channel-name>
+```
+
+Now `@<slug>` is a member of that channel. Mention it in chat — your
+bot replies, running on your laptop, reading your workspace.
 
 ## Troubleshooting
 
@@ -177,7 +187,7 @@ compounds.
 ::: details "Could not fetch bundle"
 The host hasn't run `make build-bridge` yet. Ask the admin to run it.
 The bundle has to be served from the gateway at
-`<your-server-url>/admin/download/nexus-bridge.js`.
+`<gateway-url>/admin/download/nexus-bridge.js`.
 :::
 
 ::: details Bot replies but with nonsense

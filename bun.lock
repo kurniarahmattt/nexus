@@ -22,6 +22,13 @@
         "typescript": "^5.6.0",
       },
     },
+    "packages/nexus-cli": {
+      "name": "@nexus/cli",
+      "version": "0.1.0",
+      "bin": {
+        "nexus": "./bin/nexus.ts",
+      },
+    },
     "packages/schema": {
       "name": "@nexus/schema",
       "version": "0.1.0",
@@ -272,6 +279,8 @@
     "@msgpackr-extract/msgpackr-extract-linux-x64": ["@msgpackr-extract/msgpackr-extract-linux-x64@3.0.3", "", { "os": "linux", "cpu": "x64" }, "sha512-cvwNfbP07pKUfq1uH+S6KJ7dT9K8WOE4ZiAcsrSes+UY55E/0jLYc+vq+DO7jlmqRb5zAggExKm0H7O/CBaesg=="],
 
     "@msgpackr-extract/msgpackr-extract-win32-x64": ["@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3", "", { "os": "win32", "cpu": "x64" }, "sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ=="],
+
+    "@nexus/cli": ["@nexus/cli@workspace:packages/nexus-cli"],
 
     "@nexus/composer": ["@nexus/composer@workspace:services/composer"],
 

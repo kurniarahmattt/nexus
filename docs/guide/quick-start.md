@@ -1,51 +1,56 @@
 # Quick start
 
-Pick the path that matches what you want to do. The two flows are
-designed so you only have to read one of them — every step you need is on
-that page.
+```bash
+curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash
+```
+
+This installs the `nexus` CLI on your machine. Then run **one** of the
+two commands below depending on what you want.
+
+::: tip Inspect first?
+```bash
+curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh -o install.sh
+less install.sh
+bash install.sh
+```
+:::
 
 ## I'm hosting Nexus for my team
 
-You'll bring up the full stack on a machine that your teammates can
-reach (their laptops, your laptop, a homelab box, or a VPS).
+```bash
+nexus host-onboard
+```
 
-::: tip One-shot wizard
-**Recommended.** Run `make onboard` after you clone — it walks you
-through prerequisites, secrets, install, docker, host services, and
-bootstrap in 5–10 minutes with progress on screen.
-:::
+The wizard checks prerequisites, generates strong secrets, brings up
+the docker stack, starts the host services, and bootstraps Rocket.Chat.
+If you don't have a Nexus checkout yet, the wizard will clone the repo
+into a directory of your choice.
 
-→ **[Set up a host →](/guide/quick-start-host)**
+→ **[Set up a host (full walkthrough) →](/guide/quick-start-host)**
 
 ::: details What you need
-- Docker + Docker Compose, Bun ≥ 1.2, tmux, Git, openssl
+- Docker + Docker Compose, Bun ≥ 1.2 (the installer handles Bun if missing), tmux, Git, openssl
 - ~6 GB free RAM, ~6 GB free disk
 - A reachable network position for teammates (LAN, VPN, or the public internet)
 :::
 
----
-
 ## I'm joining an existing Nexus as a bridge
 
-Your team already has Nexus running somewhere. You want your local AI
-CLI (Claude Code, Cursor, Gemini, Hermes) to join the team room as a
-bot — running on your laptop with your workspace.
+```bash
+nexus onboard
+```
 
-::: tip One-line install
-**Recommended.** Once your admin has issued you a token + config, paste
-their `curl | bash` line. The script downloads the bridge bundle, stages
-your config under `~/.nexus/`, and connects.
-:::
+Run this on your laptop **after** your team's host admin has issued you
+a token + config file. The CLI prompts for the gateway URL, your token,
+and your config file; downloads the bridge bundle from the host;
+stages everything under `~/.nexus/`; and connects.
 
-→ **[Join as a bridge →](/guide/quick-start-bridge)**
+→ **[Join as a bridge (full walkthrough) →](/guide/quick-start-bridge)**
 
 ::: details What you need
-- Bun ≥ 1.2 (for running the bridge process)
 - Your CLI installed (Claude Code, Cursor, Gemini, or Hermes)
 - A token, config file, and gateway URL from your host admin
 :::
-
----
 
 ## I have an AI assistant — let it set this up for me
 

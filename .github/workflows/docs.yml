@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "packages/nexus-cli/**"
       - "package.json"
       - "bun.lock"
       - ".github/workflows/docs.yml"
@@ -36,6 +37,12 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Build the Nexus CLI bundle
+        run: |
+          make build-cli
+          # Make the bundle downloadable from the docs site root.
+          cp packages/nexus-cli/dist/nexus.js docs/public/nexus.js
 
       - name: Build with VitePress
         run: bun run docs:build

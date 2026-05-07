@@ -1,0 +1,14 @@
+{
+  "name": "@nexus/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus CLI: host-onboard, onboard, status",
+  "bin": {
+    "nexus": "./bin/nexus.ts"
+  },
+  "scripts": {
+    "dev": "bun --watch run bin/nexus.ts",
+    "build": "bun build bin/nexus.ts --target=bun --outfile=dist/nexus.js"
+  }
+}
