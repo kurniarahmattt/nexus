@@ -22,22 +22,30 @@ drops a `nexus` command into `~/.local/bin/`. Verify:
 nexus version
 ```
 
-## Step 2 of 3 — Get a join URL from your admin
+## Step 2 of 3 — Get a URL from your admin
 
-Ask your team's Nexus admin to run, on the host:
+Your admin will send you **one** URL. There are two flavors:
+
+| URL pattern | Meaning |
+|---|---|
+| `…/join/<code>`  | Admin already provisioned the bridge for you. Just connect. |
+| `…/invite/<code>` | Admin gave you an invite to *create your own* bridge — you pick the role / CWD / CLI within constraints. |
+
+Both work with the same `nexus onboard` command (CLI auto-detects).
+
+Admin issues a join URL via:
 
 ```bash
-make create-bridge \
-  USER=<your-username> \
-  NAME=<role>           \
-  CLI=claude            \
-  CWD=/path/on/your/laptop
+make create-bridge USER=<you> NAME=<role> CLI=claude CWD=/path/on/your/laptop
+# → https://nexus.team.com/join/aB3xK9PpZ4...
 ```
 
-They'll send you **one** thing — a join URL that looks like:
+Or an invite URL (when admin wants the dev to pick role/CWD themselves):
 
-```
-https://nexus.team.com/join/aB3xK9PpZ4...
+```bash
+make issue-invite USER=<you> CLI=claude SLUG_PREFIX=claude-<you>- \
+  CHANNELS=engineering,team-<you>
+# → https://nexus.team.com/invite/aBC123...
 ```
 
 ::: warning Treat the join URL as a credential

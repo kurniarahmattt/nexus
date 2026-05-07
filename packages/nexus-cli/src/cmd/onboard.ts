@@ -49,27 +49,34 @@ function parseArgs(argv: string[]): OnboardArgs {
 }
 
 function printHelp(): void {
-  console.log(`${c.bold("nexus onboard")} — join an existing Nexus instance as a bridge
+  console.log(`${c.bold("nexus onboard")} — connect your local CLI to a Nexus host as a bridge
+
+Auto-detects URL type:
+  • ${c.cyan("/join/<code>")}    — claim an existing bridge identity (admin already
+                       provisioned the slug, persona, and cwd).
+  • ${c.cyan("/invite/<code>")}  — create a NEW bridge for yourself, within the
+                       constraints the admin pinned in the invite. The CLI
+                       prompts for name/cwd/cli, then auto-chains into the
+                       join flow.
 
 ${c.bold("Usage:")}
-  nexus onboard <join-url>                    ${c.dim("# recommended")}
-  nexus onboard                               ${c.dim("# interactive prompts")}
-  nexus onboard --join <url>
+  nexus onboard <url>                       ${c.dim("# recommended")}
+  nexus onboard                             ${c.dim("# interactive prompts")}
   nexus onboard --server <ws-url> --token <t> --config <path>   ${c.dim("# legacy")}
 
 ${c.bold("Options:")}
-  <join-url>          A nexus join URL like https://nexus.team.com/join/<code>
-  --join <url>        Same as the positional join URL
-  --server <url>      Gateway WebSocket URL (legacy)
+  <url>               Either a /join/<code> or /invite/<code> URL from your admin
+  --join <url>        Explicit form of the same
+  --server <url>      Gateway WebSocket URL (legacy 3-flag flow)
   --token <token>     Bridge token (legacy)
   --config <path>     Path to a bridges/<slug>.json file (legacy)
   --persistent        Register a systemd user unit for auto-restart (Linux)
-  --allow-insecure    Allow plaintext http:// join URLs (NOT recommended)
+  --allow-insecure    Allow plaintext http:// URLs (NOT recommended)
   -h, --help          Show this help
 
 ${c.bold("Examples:")}
   nexus onboard https://nexus.team.com/join/abc123def
-  nexus onboard --join https://nexus.team.com/join/abc123def --persistent
+  nexus onboard https://nexus.team.com/invite/aBC123     ${c.dim("# new bridge")}
 `);
 }
 
@@ -87,19 +94,42 @@ ${c.bold("Joining a Nexus host as a bridge.")}
   }
   log.ok("Bun present");
 
-  // ── Path 1: join URL ────────────────────────────────────────────────
+  // ── Path 1: URL (auto-detect /join/ vs /invite/) ────────────────────
   if (args.joinUrl) {
+    if (args.joinUrl.includes("/invite/")) {
+      // Invite URL → request a fresh bridge first, then chain to onboard.
+      log.info("URL is an invite — requesting a new bridge for you first.");
+      const { requestBridge } = await import("./request-bridge.ts");
+      const passthrough = [
+        args.joinUrl,
+        ...(args.allowInsecure ? ["--allow-insecure"] : []),
+        "--auto-join",
+      ];
+      await requestBridge(passthrough);
+      return;
+    }
+    // Plain join URL.
     await onboardViaJoinUrl(args.joinUrl, args);
     return;
   }
 
-  // No flags / URL — interactive: ask whether the dev has a join URL.
+  // No flags / URL — interactive: ask what the dev has.
   if (!args.server && !args.token && !args.config) {
-    const hasUrl = await confirm("Do you have a join URL from your admin?", true);
+    const hasUrl = await confirm("Do you have a URL from your admin (join or invite)?", true);
     if (hasUrl) {
-      const url = (await ask("Paste the join URL")).trim();
+      const url = (await ask("Paste the URL")).trim();
       if (url) {
         args.joinUrl = url;
+        if (url.includes("/invite/")) {
+          log.info("That's an invite URL — switching to bridge-creation flow.");
+          const { requestBridge } = await import("./request-bridge.ts");
+          await requestBridge([
+            url,
+            ...(args.allowInsecure ? ["--allow-insecure"] : []),
+            "--auto-join",
+          ]);
+          return;
+        }
         await onboardViaJoinUrl(url, args);
         return;
       }

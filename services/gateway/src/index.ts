@@ -24,7 +24,12 @@ import { invokeQueue, redisConnection } from "./queues.ts";
 import { fireMem0Add } from "./mem0.ts";
 import { detectLandmarks, persistLandmarks } from "./landmarks.ts";
 import { bridgeWSHandler, handleDispatch, bridgeStatus } from "./bridge.ts";
-import { createUser as rcCreateUser, botLogin as rcBotLogin } from "./api/rc.ts";
+import {
+  createUser as rcCreateUser,
+  botLogin as rcBotLogin,
+  inviteToRoom as rcInviteToRoom,
+  addTriggerWord,
+} from "./api/rc.ts";
 import apiRoutes from "./api/routes.ts";
 import { Debouncer, type PendingFlush } from "./debounce.ts";
 
@@ -299,7 +304,7 @@ app.get("/invite/:code", async (c) => {
   const wantsJson = accept.includes("application/json");
 
   const { rows } = await pool.query(
-    `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix
+    `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix, default_channels
        FROM bridge_invites WHERE code = $1`,
     [code],
   );
@@ -328,8 +333,9 @@ app.get("/invite/:code", async (c) => {
         uses_remaining: remaining,
         allowed_cli_kinds: row.allowed_cli_kinds,
         slug_prefix: row.slug_prefix,
+        default_channels: row.default_channels,
       })
-    : c.html(invitePreviewPage(c.req.url, row.expires_at, remaining, row.allowed_cli_kinds, row.slug_prefix));
+    : c.html(invitePreviewPage(c.req.url, row.expires_at, remaining, row.allowed_cli_kinds, row.slug_prefix, row.default_channels));
 });
 
 const InviteRequestBody = z.object({
@@ -363,7 +369,7 @@ app.post("/invite/:code", async (c) => {
 
     // 1. Lock + validate the invite.
     const inviteRows = await client.query(
-      `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix, allowed_user_id
+      `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix, allowed_user_id, default_channels
          FROM bridge_invites WHERE code = $1 FOR UPDATE`,
       [code],
     );
@@ -486,12 +492,40 @@ app.post("/invite/:code", async (c) => {
 
     await client.query("COMMIT");
 
+    // 9. Side effects after the DB commit:
+    //    a) Add @<slug> to the outgoing webhook trigger words so the
+    //       gateway picks up mentions immediately.
+    //    b) Invite the bot to admin-pre-approved channels (default_channels).
+    //    Errors are logged but don't undo the bridge — admin can retry
+    //    `make invite-bot` if any channel fails.
+    addTriggerWord(slug).catch((err) =>
+      log.warn({ slug, err: String(err) }, "addTriggerWord failed (non-fatal)"),
+    );
+
+    const channelInviteResults: Record<string, boolean> = {};
+    const channels: string[] = inv.default_channels ?? [];
+    for (const channel of channels) {
+      try {
+        const ok = await rcInviteToRoom({
+          roomName: channel,
+          username: slug,
+          kind: "channel",
+        });
+        channelInviteResults[channel] = ok;
+        log.info({ slug, channel, ok }, "auto-invite to channel");
+      } catch (err) {
+        channelInviteResults[channel] = false;
+        log.warn({ slug, channel, err: String(err) }, "auto-invite failed");
+      }
+    }
+
     const joinUrl = `${env.NEXUS_PUBLIC_URL}/join/${joinCode}`;
     return c.json({
       ok: true,
       slug,
       join_url: joinUrl,
       join_expires_at: joinExpires.toISOString(),
+      channels_invited: channelInviteResults,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -508,10 +542,14 @@ function invitePreviewPage(
   remaining: number,
   allowedClis: string[] | null | undefined,
   slugPrefix: string | null | undefined,
+  defaultChannels: string[] | null | undefined,
 ): string {
   const expIso = typeof expiresAt === "string" ? expiresAt : expiresAt.toISOString();
   const cliText = allowedClis && allowedClis.length > 0 ? allowedClis.join(", ") : "any";
   const prefixText = slugPrefix ? `<li>slug must start with <code>${slugPrefix}</code></li>` : "";
+  const channelsText = defaultChannels && defaultChannels.length > 0
+    ? `<li>auto-invite to: <code>${defaultChannels.map(ch => "#" + ch).join(", ")}</code></li>`
+    : "";
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>Nexus invite</title>
 <style>
@@ -532,6 +570,7 @@ function invitePreviewPage(
 <ul>
   <li>allowed CLIs: <code>${cliText}</code></li>
   ${prefixText}
+  ${channelsText}
   <li>uses remaining: ${remaining}</li>
   <li>expires: ${expIso}</li>
 </ul>

@@ -121,14 +121,22 @@ yourself — no per-bridge admin involvement.
 
 ```bash
 # On the host:
-make issue-invite USER=alice CLI=claude SLUG_PREFIX=claude-alice-
-# Output:
-#   https://nexus.team.com/invite/<code>
-#   For: alice
-#   CLIs: claude
-#   Prefix: claude-alice-
-#   Expires: 72 hours
-#   Max uses: 1
+make issue-invite USER=alice CLI=claude \
+  SLUG_PREFIX=claude-alice- \
+  CHANNELS=engineering,team-alice
+```
+
+Output:
+
+```
+  https://nexus.team.com/invite/<code>
+
+  For:        alice
+  CLIs:       claude
+  Prefix:     claude-alice-
+  Channels:   engineering,team-alice
+  Expires:    72 hours from now
+  Max uses:   1
 ```
 
 The invite carries constraints:
@@ -138,14 +146,37 @@ The invite carries constraints:
 | `USER=<username>` | Anchors the invite to a specific dev (audit log records who used it) |
 | `CLI=<list>` | Optional. Restrict to specific CLIs (e.g. `claude` only). Empty = any |
 | `SLUG_PREFIX=<prefix>` | Optional. Force every created bridge's slug to start with this — prevents naming squatting |
+| `CHANNELS=<list>` | Optional. Auto-invite the new bot to these RC channels on creation. Comma-separated, no `#`. Pre-approved list — admin decides which channels are safe |
 | `NEXUS_INVITE_TTL_HOURS=N` | TTL in hours (default 72) |
 | `NEXUS_INVITE_MAX_USES=N` | How many bridges this single invite can spawn (default 1) |
 
 For a multi-role onboarding, set `MAX_USES=3` and the dev can create
-backend / frontend / infra bridges from one invite.
+backend / frontend / infra bridges from one invite — all auto-joining
+the channels the admin pre-approved.
 
-### Step 2 — Dev consumes it
+### Step 2 — Dev consumes it (one command)
 
+```bash
+nexus onboard https://nexus.team.com/invite/<code>
+```
+
+That's it. The CLI:
+
+1. Detects the URL is `/invite/<code>` (vs `/join/<code>`).
+2. Prompts for the values that aren't on the invite — name (your role),
+   cwd (your laptop's project path), CLI (if the invite allows
+   multiple), username.
+3. POSTs to the gateway. The gateway:
+   - Validates the invite (expiry, uses_count, CLI allowlist, prefix).
+   - Creates the Rocket.Chat bot user (`@<cli>-<username>-<name>`).
+   - Inserts an `agents` row owned by your user.
+   - Issues a one-shot join URL (24 h TTL).
+   - **Auto-invites the bot to every channel in `default_channels`**.
+4. Returns: `{ slug, join_url, channels_invited: { ... } }`.
+5. CLI auto-chains into the join flow → bundle downloaded → bridge
+   connected → `bridge authenticated` log.
+
+::: details Want non-interactive? Use the underlying `request-bridge` directly.
 ```bash
 nexus request-bridge https://nexus.team.com/invite/<code> \
   --name backend \
@@ -153,39 +184,34 @@ nexus request-bridge https://nexus.team.com/invite/<code> \
   --cli claude \
   --auto-join
 ```
-
-What happens:
-
-1. The CLI POSTs to the invite URL. The gateway:
-   - Validates the invite (not expired, not exhausted, CLI allowed,
-     prefix matches).
-   - Creates a Rocket.Chat bot user (`@<cli>-<username>-<name>`).
-   - Inserts an `agents` row owned by the dev with a default persona.
-   - Issues a one-shot join URL (24 h TTL).
-2. CLI prints the join URL. With `--auto-join`, it immediately calls
-   `nexus onboard <url>` so the bridge is connected in one shot.
+This is the same flow `nexus onboard <invite-url>` runs, just with
+flags instead of prompts. Useful for shell scripts or CI.
+:::
 
 ### Step 3 — Customize
 
-After the bridge is running, edit the persona / display name to fit the
-new bot's role:
+After the bridge is running, fine-tune the persona / display name:
 
 ```bash
 nexus persona claude-alice-backend
 ```
 
-### Step 4 — Admin invites the bot to a channel
+### Channel scope: who decides what
 
-```bash
-# Back on the host:
-make invite-bot SLUG=claude-alice-backend CHANNEL=engineering
-```
+| Action | Who |
+|---|---|
+| Bot exists at all | Admin (issues the invite + sets `CHANNELS=`) |
+| Bot is a member of a channel | Admin (via `CHANNELS=` in invite, or `make invite-bot` later) |
+| Bot's persona / name | Dev (via `nexus persona`) |
+| Bot's CWD on this laptop | Dev (set at request-bridge time) |
 
-::: tip Why isn't channel invitation also self-service?
-Adding a bot to a channel is a higher-trust action than spinning up a
-bridge — it lets the bot read all messages in that channel. We keep it
-admin-gated to prevent a curious dev from auto-joining their bot to
-sensitive channels (incident response, exec discussions, etc.).
+::: tip Why is channel pre-approval an admin call?
+Adding a bot to a channel lets it read every message in that channel.
+That's a real privacy boundary — the dev's CLI on their laptop will
+see those messages once the bot is mentioned (or even just listening
+for context if so configured). The admin pre-approves a safe set when
+issuing the invite; anything else needs an explicit
+`make invite-bot SLUG=… CHANNEL=…` call later.
 :::
 
 ## What's next
