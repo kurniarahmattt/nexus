@@ -83,15 +83,22 @@ async function markConnected(slug: string): Promise<void> {
 }
 
 /**
- * Apply identity fields sent by the bridge — CREATE-ONLY semantics.
+ * Apply identity fields sent by the bridge — TRUST-THE-BRIDGE semantics.
  *
- * Bridge identity is meant for initial bootstrap: if a field is already
- * set in the DB (typically by the Admin UI or by an earlier bridge
- * connect), we do NOT overwrite. This makes Admin UI edits authoritative.
- * To re-allow a bridge to set a field, clear it via the UI first.
+ * The bridge is owned by the developer whose CLI it wraps; the bridge
+ * token authenticates them as that owner. Whatever values the bridge
+ * announces in its hello frame become the new truth on each connect:
  *
- * Session-scoped fields (cwd_override) stay in the in-memory session,
- * not handled here.
+ *   • persona      → agents.config.system_prompt
+ *   • description  → agents.config.description
+ *   • model        → agents.config.model
+ *   • display_name → agents.display_name (also propagated to RC profile)
+ *
+ * No-op for fields the bridge omits (so a bridge that doesn't send
+ * `persona` doesn't blank an existing one).
+ *
+ * Returns whether `display_name` actually changed (caller uses this to
+ * decide if Rocket.Chat profile sync is needed).
  */
 async function applyIdentity(
   slug: string,
@@ -101,7 +108,7 @@ async function applyIdentity(
     description?: string;
     model?: string;
   },
-): Promise<void> {
+): Promise<{ displayNameChanged: boolean; newDisplayName: string | null }> {
   const { rows } = await pool.query<{
     config: {
       system_prompt?: string;
@@ -111,13 +118,12 @@ async function applyIdentity(
     display_name: string | null;
   }>(`SELECT config, display_name FROM agents WHERE slug = $1`, [slug]);
   const row = rows[0];
-  if (!row) return;
+  if (!row) return { displayNameChanged: false, newDisplayName: null };
 
-  const cfg = row.config ?? {};
   const configPatch: Record<string, unknown> = {};
-  if (identity.persona && !cfg.system_prompt)     configPatch.system_prompt = identity.persona;
-  if (identity.description && !cfg.description)   configPatch.description   = identity.description;
-  if (identity.model && !cfg.model)               configPatch.model         = identity.model;
+  if (identity.persona !== undefined)     configPatch.system_prompt = identity.persona;
+  if (identity.description !== undefined) configPatch.description   = identity.description;
+  if (identity.model !== undefined)       configPatch.model         = identity.model;
 
   const updates: string[] = [];
   const params: unknown[] = [];
@@ -127,11 +133,16 @@ async function applyIdentity(
     updates.push(`config = config || $${i++}::jsonb`);
     params.push(JSON.stringify(configPatch));
   }
-  if (identity.display_name && !row.display_name) {
+
+  let displayNameChanged = false;
+  let newDisplayName: string | null = row.display_name;
+  if (identity.display_name && identity.display_name !== row.display_name) {
     updates.push(`display_name = $${i++}`);
     params.push(identity.display_name);
+    displayNameChanged = true;
+    newDisplayName = identity.display_name;
   }
-  if (updates.length === 0) return;
+  if (updates.length === 0) return { displayNameChanged: false, newDisplayName };
 
   params.push(slug);
   updates.push(`updated_at = now()`);
@@ -141,6 +152,60 @@ async function applyIdentity(
       params,
     )
     .catch((err) => log.warn({ err: String(err) }, "applyIdentity failed"));
+
+  return { displayNameChanged, newDisplayName };
+}
+
+/**
+ * Push the bridge's display_name to its Rocket.Chat user profile so
+ * humans see the new name in chat (member list, mention autocomplete,
+ * message author). Uses the bot's own auth_token (stored at create-bridge
+ * time) and the user-self-update endpoint, so this works without admin
+ * credentials.
+ */
+async function syncRocketChatDisplayName(
+  slug: string,
+  newDisplayName: string,
+): Promise<void> {
+  const { rows } = await pool.query<{
+    auth_token: string | null;
+    auth_user_id: string | null;
+  }>(
+    `SELECT config->>'auth_token'   AS auth_token,
+            config->>'auth_user_id' AS auth_user_id
+       FROM agents WHERE slug = $1`,
+    [slug],
+  );
+  const r = rows[0];
+  if (!r?.auth_token || !r.auth_user_id) {
+    log.warn({ slug }, "syncRocketChatDisplayName: bot has no auth_token; skipping RC profile update");
+    return;
+  }
+
+  const rcUrl = process.env.ROCKETCHAT_URL ?? "http://localhost:3000";
+  try {
+    const res = await fetch(`${rcUrl}/api/v1/users.updateOwnBasicInfo`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": r.auth_token,
+        "X-User-Id": r.auth_user_id,
+      },
+      body: JSON.stringify({ data: { name: newDisplayName } }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log.warn(
+        { slug, status: res.status, body: body.slice(0, 200) },
+        "syncRocketChatDisplayName: RC API rejected update",
+      );
+      return;
+    }
+    log.info({ slug, newDisplayName }, "RC display name updated");
+  } catch (err) {
+    log.warn({ slug, err: String(err) }, "syncRocketChatDisplayName failed");
+  }
 }
 
 // ── WS handlers installed by gateway index.ts ──────────────────────────
@@ -189,7 +254,13 @@ export const bridgeWSHandler = {
       });
       await markConnected(auth.slug);
       if (frame.identity) {
-        await applyIdentity(auth.slug, frame.identity);
+        const result = await applyIdentity(auth.slug, frame.identity);
+        if (result.displayNameChanged && result.newDisplayName) {
+          // Don't await — RC API call shouldn't block the bridge welcome.
+          syncRocketChatDisplayName(auth.slug, result.newDisplayName).catch(
+            (err) => log.warn({ err: String(err) }, "RC sync (non-fatal)"),
+          );
+        }
       }
       sendFrame(ws, {
         type: "welcome",

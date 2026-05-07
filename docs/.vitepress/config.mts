@@ -80,6 +80,7 @@ export default defineConfig({
           text: "Going deeper",
           collapsed: false,
           items: [
+            { text: "Managing your bridge", link: "/guide/managing-your-bridge" },
             { text: "Bridges (full reference)", link: "/guide/bridges" },
             {
               text: "Multi-developer collaboration",

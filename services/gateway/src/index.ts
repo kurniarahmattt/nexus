@@ -8,7 +8,8 @@
 
 import { Hono } from "hono";
 import pino from "pino";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
+import { z } from "zod";
 import { RocketChatWebhook, type InvokeJob } from "@nexus/schema";
 import { env } from "./env.ts";
 import {
@@ -23,6 +24,7 @@ import { invokeQueue, redisConnection } from "./queues.ts";
 import { fireMem0Add } from "./mem0.ts";
 import { detectLandmarks, persistLandmarks } from "./landmarks.ts";
 import { bridgeWSHandler, handleDispatch, bridgeStatus } from "./bridge.ts";
+import { createUser as rcCreateUser, botLogin as rcBotLogin } from "./api/rc.ts";
 import apiRoutes from "./api/routes.ts";
 import { Debouncer, type PendingFlush } from "./debounce.ts";
 
@@ -284,6 +286,256 @@ function joinErrorPage(title: string, body: string): string {
 <html><head><meta charset="utf-8"><title>${title}</title>
 <style>body { font-family: system-ui, sans-serif; max-width: 560px; margin: 4rem auto; padding: 0 1rem; }</style>
 </head><body><h1>${title}</h1><p>${body}</p></body></html>`;
+}
+
+// ── Bridge invites (admin-issued tokens for self-service bridge creation) ───
+// GET  /invite/:code   → preview (HTML or JSON via Accept header), no consume
+// POST /invite/:code   → create a new bridge for the requester
+//                        Body: { name, cwd, cli, persona?, display_name?, model? }
+//                        Returns: { join_url, slug, expires_at }
+app.get("/invite/:code", async (c) => {
+  const code = c.req.param("code");
+  const accept = c.req.header("accept") ?? "";
+  const wantsJson = accept.includes("application/json");
+
+  const { rows } = await pool.query(
+    `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix
+       FROM bridge_invites WHERE code = $1`,
+    [code],
+  );
+  if (rows.length === 0) {
+    return wantsJson
+      ? c.json({ error: "invalid_code" }, 404)
+      : c.html(joinErrorPage("Invalid invite", "This invite code does not exist."), 404);
+  }
+  const row = rows[0]!;
+  if (row.uses_count >= row.max_uses) {
+    return wantsJson
+      ? c.json({ error: "exhausted", uses_count: row.uses_count, max_uses: row.max_uses }, 410)
+      : c.html(joinErrorPage("Invite exhausted", "This invite has been used up. Ask your admin for a new one."), 410);
+  }
+  if (new Date(row.expires_at) < new Date()) {
+    return wantsJson
+      ? c.json({ error: "expired", expires_at: row.expires_at }, 410)
+      : c.html(joinErrorPage("Expired", `Invite expired at ${row.expires_at}.`), 410);
+  }
+
+  const remaining = row.max_uses - row.uses_count;
+  return wantsJson
+    ? c.json({
+        ready: true,
+        expires_at: row.expires_at,
+        uses_remaining: remaining,
+        allowed_cli_kinds: row.allowed_cli_kinds,
+        slug_prefix: row.slug_prefix,
+      })
+    : c.html(invitePreviewPage(c.req.url, row.expires_at, remaining, row.allowed_cli_kinds, row.slug_prefix));
+});
+
+const InviteRequestBody = z.object({
+  name: z.string().regex(/^[a-z0-9-]+$/).min(1).max(40),
+  cwd: z.string().min(1),
+  cli: z.string().regex(/^[a-z][a-z-]+$/).min(2).max(20),
+  username: z.string().regex(/^[a-z0-9_-]+$/).min(2).max(40),
+  persona: z.string().optional(),
+  display_name: z.string().optional(),
+  description: z.string().optional(),
+  model: z.string().optional(),
+});
+
+app.post("/invite/:code", async (c) => {
+  const code = c.req.param("code");
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    c.req.header("x-real-ip") ??
+    "unknown";
+
+  const parsed = InviteRequestBody.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  }
+  const body = parsed.data;
+  const slug = `${body.cli}-${body.username}-${body.name}`;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Lock + validate the invite.
+    const inviteRows = await client.query(
+      `SELECT code, expires_at, max_uses, uses_count, allowed_cli_kinds, slug_prefix, allowed_user_id
+         FROM bridge_invites WHERE code = $1 FOR UPDATE`,
+      [code],
+    );
+    if (inviteRows.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "invalid_code" }, 404);
+    }
+    const inv = inviteRows.rows[0];
+    if (inv.uses_count >= inv.max_uses) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "exhausted" }, 410);
+    }
+    if (new Date(inv.expires_at) < new Date()) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "expired" }, 410);
+    }
+    if (inv.allowed_cli_kinds && inv.allowed_cli_kinds.length > 0 && !inv.allowed_cli_kinds.includes(body.cli)) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "cli_not_allowed", allowed: inv.allowed_cli_kinds }, 403);
+    }
+    if (inv.slug_prefix && !slug.startsWith(inv.slug_prefix)) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "slug_prefix_mismatch", required_prefix: inv.slug_prefix }, 403);
+    }
+
+    // 2. Slug conflict check (idempotency by retrying with the same name fails — admin can change name).
+    const conflict = await client.query(`SELECT 1 FROM agents WHERE slug = $1`, [slug]);
+    if ((conflict.rowCount ?? 0) > 0) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "slug_exists", slug }, 409);
+    }
+
+    // 3. Resolve / synthesize the user row (the requesting dev needs an `agents.owner_user_id`).
+    let userId: string;
+    const userRows = await client.query<{ id: string }>(
+      `SELECT id FROM users WHERE username = $1`,
+      [body.username],
+    );
+    if (userRows.rowCount && userRows.rowCount > 0) {
+      userId = userRows.rows[0]!.id;
+    } else {
+      const synth = await client.query<{ id: string }>(
+        `INSERT INTO users (rocketchat_id, username, display_name)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [`${body.username}-synth`, body.username, body.username],
+      );
+      userId = synth.rows[0]!.id;
+    }
+
+    // 4. Issue bridge token.
+    const bridgeToken = randomBytes(24).toString("hex");
+
+    // 5. Create RC bot user (rcCreateUser uses cached admin creds).
+    const display = body.display_name ??
+      `${body.cli[0]!.toUpperCase()}${body.cli.slice(1)} (${body.username}-${body.name})`;
+    let rcBotId: string;
+    let authToken = "";
+    let authUserId = "";
+    try {
+      const botPassword = "nx-" + randomBytes(12).toString("base64url");
+      rcBotId = await rcCreateUser({
+        username: slug,
+        email: `${slug}@nexus.local`,
+        name: display,
+        password: botPassword,
+        roles: ["bot", "user"],
+      });
+      const botCreds = await rcBotLogin(slug, botPassword);
+      authToken = botCreds.token;
+      authUserId = botCreds.userId;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      log.warn({ slug, err: String(err) }, "RC bot creation failed during invite consume");
+      return c.json({ error: "rc_bot_failed", detail: String(err) }, 502);
+    }
+
+    // 6. Insert agents row.
+    const persona = body.persona ??
+      `You are @${slug}, a Nexus bridge bot owned by ${body.username}, wrapping ${body.cli} on their machine in ${body.cwd}. Be concise. Match the user's language. Watch [TEAM CONTEXT] for attribution.`;
+    await client.query(
+      `INSERT INTO agents (slug, display_name, cli_command, cli_args, rocketchat_username,
+                           rocketchat_bot_id, kind, owner_user_id, config, enabled)
+       VALUES ($1, $2, $3, '[]'::jsonb, $1, $4, 'remote', $5, $6::jsonb, true)`,
+      [
+        slug,
+        display,
+        body.cli,
+        rcBotId,
+        userId,
+        JSON.stringify({
+          system_prompt: persona,
+          description: body.description ?? "",
+          model: body.model ?? "",
+          auth_token: authToken,
+          auth_user_id: authUserId,
+          bridge: { token: bridgeToken, cli_kind: body.cli, cwd: body.cwd },
+        }),
+      ],
+    );
+
+    // 7. Issue a one-shot join code so the requester can immediately onboard.
+    const joinCode = randomBytes(20).toString("base64url");
+    const joinExpires = new Date(Date.now() + env.NEXUS_JOIN_TTL_HOURS * 3600_000);
+    await client.query(
+      `INSERT INTO bridge_join_codes (code, agent_slug, issued_by, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+      [joinCode, slug, userId, joinExpires],
+    );
+
+    // 8. Mark invite usage.
+    await client.query(
+      `UPDATE bridge_invites SET uses_count = uses_count + 1 WHERE code = $1`,
+      [code],
+    );
+    await client.query(
+      `INSERT INTO bridge_invite_uses (invite_code, consumed_from, resulting_slug, consumed_by)
+         VALUES ($1, $2, $3, $4)`,
+      [code, ip, slug, userId],
+    );
+
+    await client.query("COMMIT");
+
+    const joinUrl = `${env.NEXUS_PUBLIC_URL}/join/${joinCode}`;
+    return c.json({
+      ok: true,
+      slug,
+      join_url: joinUrl,
+      join_expires_at: joinExpires.toISOString(),
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    log.error({ err, code }, "invite consume failed");
+    return c.json({ error: "internal" }, 500);
+  } finally {
+    client.release();
+  }
+});
+
+function invitePreviewPage(
+  inviteUrl: string,
+  expiresAt: Date | string,
+  remaining: number,
+  allowedClis: string[] | null | undefined,
+  slugPrefix: string | null | undefined,
+): string {
+  const expIso = typeof expiresAt === "string" ? expiresAt : expiresAt.toISOString();
+  const cliText = allowedClis && allowedClis.length > 0 ? allowedClis.join(", ") : "any";
+  const prefixText = slugPrefix ? `<li>slug must start with <code>${slugPrefix}</code></li>` : "";
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>Nexus invite</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; color: #222; line-height: 1.5; }
+  code { background: #f4f4f4; padding: 0.15em 0.35em; border-radius: 3px; }
+  .cmd { background: #1e1e1e; color: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, monospace; }
+  .meta { color: #666; font-size: 0.9em; margin-top: 2rem; }
+  ul { color: #666; font-size: 0.9em; }
+</style></head><body>
+<h1>Nexus invite</h1>
+<p>This invite lets you create a new bridge bot for yourself. Run on the laptop where the bridge will live:</p>
+<div class="cmd">nexus request-bridge ${inviteUrl} \\
+  --name &lt;role&gt; \\
+  --cwd /path/on/your/laptop</div>
+<p>Don't have the CLI yet?</p>
+<div class="cmd">curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash</div>
+<p>Constraints:</p>
+<ul>
+  <li>allowed CLIs: <code>${cliText}</code></li>
+  ${prefixText}
+  <li>uses remaining: ${remaining}</li>
+  <li>expires: ${expIso}</li>
+</ul>
+</body></html>`;
 }
 
 app.post("/webhook", async (c) => {

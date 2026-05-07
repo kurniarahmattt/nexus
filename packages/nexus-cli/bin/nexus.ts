@@ -11,6 +11,8 @@
 
 import { hostOnboard } from "../src/cmd/host-onboard.ts";
 import { onboard } from "../src/cmd/onboard.ts";
+import { requestBridge } from "../src/cmd/request-bridge.ts";
+import { persona } from "../src/cmd/persona.ts";
 import { c } from "../src/lib/colors.ts";
 
 const VERSION = "0.1.0";
@@ -30,8 +32,17 @@ ${c.bold("Commands:")}
 
   ${c.cyan("onboard")}        Join an existing Nexus instance as a bridge.
                  Run this on your laptop AFTER your team's host admin
-                 has issued you a token + config file. Downloads the
-                 bridge bundle from the host and stays connected.
+                 has issued you a join URL. Downloads the bridge
+                 bundle from the host and stays connected.
+
+  ${c.cyan("request-bridge")} Use an admin invite to create a new bridge for
+                 yourself (no admin involvement after invite is issued).
+                 Picks slug + cwd + CLI within the invite's constraints,
+                 then prints a join URL ready for \`nexus onboard\`.
+
+  ${c.cyan("persona")}        View / edit a bridge's persona, display name, or
+                 description on this laptop. Changes propagate to the
+                 host on next bridge \`hello\` (the CLI offers to restart).
 
 ${c.bold("Other:")}
   nexus version  Print the CLI version.
@@ -52,6 +63,12 @@ async function main(): Promise<void> {
       break;
     case "onboard":
       await onboard(rest);
+      break;
+    case "request-bridge":
+      await requestBridge(rest);
+      break;
+    case "persona":
+      await persona(rest);
       break;
     case "version":
     case "--version":

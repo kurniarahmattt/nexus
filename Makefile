@@ -94,6 +94,10 @@ issue-join-link: ## Issue a fresh one-shot join URL for an existing bridge. SLUG
 	@[ -n "$(SLUG)" ] || { echo "SLUG=<slug> required"; exit 1; }
 	@SLUG=$(SLUG) bash scripts/issue-join-link.sh
 
+issue-invite: ## Issue an invite that lets a developer create a new bridge themselves. USER=<username> [CLI=claude[,cursor,...]] [SLUG_PREFIX=...]
+	@[ -n "$(USER)" ] || { echo "USER=<username> required"; exit 1; }
+	@USER=$(USER) CLI=$(CLI) SLUG_PREFIX=$(SLUG_PREFIX) bash scripts/issue-invite.sh
+
 list-bridges: ## Show all remote bridges + connection state
 	@curl -sS http://localhost:4000/health | python3 -c "import json,sys; d=json.load(sys.stdin); \
 	  print('Connected bridges:', len(d.get('bridges',[]))); \
