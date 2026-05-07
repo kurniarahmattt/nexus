@@ -79,27 +79,38 @@ if [ -n "${CHANNELS:-}" ]; then
     else
       echo "Ensuring channels exist..."
       for ch in $(echo "$CHANNELS" | tr ',' ' '); do
-        info_resp=$(curl -sS -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
+        # RC enforces unique room names across PUBLIC (channels) AND
+        # PRIVATE (groups), so we must check both before creating.
+        info_pub=$(curl -sS -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
           "${RC_URL}/api/v1/channels.info?roomName=${ch}" 2>/dev/null || echo "")
-        case "$info_resp" in
-          *'"success":true'*)
-            echo "  ✓ #${ch} already exists"
-            ;;
-          *)
-            # Try private group first if user pre-fixed with private intent? For
-            # now we always create as public channel. Admin can change in UI.
-            create_resp=$(curl -sfS -X POST -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
-              -H "Content-Type: application/json" \
-              -d "{\"name\":\"${ch}\"}" \
-              "${RC_URL}/api/v1/channels.create" 2>/dev/null || echo "")
-            if printf '%s' "$create_resp" | grep -q '"success":true'; then
-              echo "  ✓ #${ch} created"
-            else
-              echo "  ! #${ch} create FAILED — bridge will be issued anyway, but auto-invite to this channel will fail."
-              echo "    Response: $(printf '%s' "$create_resp" | head -c 200)"
-            fi
-            ;;
-        esac
+        info_priv=$(curl -sS -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
+          "${RC_URL}/api/v1/groups.info?roomName=${ch}" 2>/dev/null || echo "")
+        if printf '%s' "$info_pub" | grep -q '"success":true'; then
+          echo "  ✓ #${ch} already exists (public channel)"
+          continue
+        fi
+        if printf '%s' "$info_priv" | grep -q '"success":true'; then
+          echo "  ✓ #${ch} already exists (private group — bot will be auto-invited)"
+          continue
+        fi
+        # Not present anywhere — create as public channel. Admin can
+        # convert to private later via RC UI if needed.
+        # NOTE: drop -f so curl prints the body even on HTTP error,
+        # giving a useful diagnostic if create fails for any reason.
+        create_resp=$(curl -sS -X POST -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
+          -H "Content-Type: application/json" \
+          -d "{\"name\":\"${ch}\"}" \
+          "${RC_URL}/api/v1/channels.create" 2>/dev/null || echo "")
+        if printf '%s' "$create_resp" | grep -q '"success":true'; then
+          echo "  ✓ #${ch} created"
+        else
+          err_msg=$(printf '%s' "$create_resp" | grep -oP '"error"\s*:\s*"\K[^"]+' | head -1 || echo "")
+          if [ -n "$err_msg" ]; then
+            echo "  ! #${ch} create FAILED: ${err_msg}"
+          else
+            echo "  ! #${ch} create FAILED (no response body)"
+          fi
+        fi
       done
     fi
   fi
