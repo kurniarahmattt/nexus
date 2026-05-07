@@ -11,6 +11,8 @@
 
 import { hostOnboard } from "../src/cmd/host-onboard.ts";
 import { onboard } from "../src/cmd/onboard.ts";
+import { requestBridge } from "../src/cmd/request-bridge.ts";
+import { persona } from "../src/cmd/persona.ts";
 import { c } from "../src/lib/colors.ts";
 
 const VERSION = "0.1.0";
@@ -28,10 +30,19 @@ ${c.bold("Commands:")}
                  services. If you don't have a Nexus checkout yet, the
                  command will clone the repo for you.
 
-  ${c.cyan("onboard")}        Join an existing Nexus instance as a bridge.
-                 Run this on your laptop AFTER your team's host admin
-                 has issued you a token + config file. Downloads the
-                 bridge bundle from the host and stays connected.
+  ${c.cyan("onboard")}        Connect your local CLI to a Nexus host as a bridge.
+                 Accepts either a /join/<code> URL (existing bridge) OR a
+                 /invite/<code> URL (creates a new bridge first, prompts
+                 for name/cwd/cli within admin-set constraints, then
+                 connects). One command for both paths.
+
+  ${c.cyan("request-bridge")} Lower-level: turn an /invite/<code> URL into a new
+                 bridge non-interactively (e.g. for scripts). Same flow
+                 \`nexus onboard <invite-url>\` does interactively.
+
+  ${c.cyan("persona")}        View / edit a bridge's persona, display name, or
+                 description on this laptop. Changes propagate to the
+                 host on next bridge \`hello\` (the CLI offers to restart).
 
 ${c.bold("Other:")}
   nexus version  Print the CLI version.
@@ -52,6 +63,12 @@ async function main(): Promise<void> {
       break;
     case "onboard":
       await onboard(rest);
+      break;
+    case "request-bridge":
+      await requestBridge(rest);
+      break;
+    case "persona":
+      await persona(rest);
       break;
     case "version":
     case "--version":
