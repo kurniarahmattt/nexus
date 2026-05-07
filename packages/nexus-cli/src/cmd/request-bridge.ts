@@ -104,7 +104,14 @@ export async function requestBridge(argv: string[]): Promise<void> {
   if (!args.name) args.name = await ask("Role / suffix for this bridge (e.g. backend)");
   if (!args.cwd)  args.cwd  = await ask("Absolute path to your project on this laptop");
   if (!args.cli)  args.cli  = (await ask("CLI to wrap (claude/cursor/gemini/hermes)", "claude")) || "claude";
-  if (!args.username) args.username = process.env.USER ?? await ask("Your username");
+  // Always prompt for username (with $USER as the default) — the slug
+  // includes the username, and admin's invite often pins a slug_prefix
+  // tied to a specific identity. Showing the prompt lets the dev
+  // override $USER without having to remember --username.
+  if (!args.username) {
+    const defaultUser = process.env.USER ?? "";
+    args.username = (await ask("Your username (matches the invite's slug_prefix)", defaultUser)) || defaultUser;
+  }
 
   if (!args.cwd?.startsWith("/")) {
     log.err(`--cwd must be an absolute path (got: ${args.cwd})`);
