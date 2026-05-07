@@ -295,37 +295,61 @@ for key in "${PORT_KEYS[@]}"; do
 done
 
 # Re-derive URLs that embed any of the ports we just settled.
-if [ "$any_relocation" = "true" ]; then
-  info "re-deriving URLs in .env to match the new ports..."
+# Run UNCONDITIONALLY (even when no_relocation): the wizard might be
+# running on a stale .env where the *_HOST_PORT vars were already
+# relocated by a previous attempt but the dependent URLs (DATABASE_URL,
+# REDIS_URL, etc.) were never updated. Idempotent — writing the same
+# value is a no-op.
+info "syncing dependent URLs in .env to match the current ports..."
 
-  pg_user="$(current_env POSTGRES_USER)"; pg_user="${pg_user:-nexus}"
-  pg_db="$(current_env POSTGRES_DB)"; pg_db="${pg_db:-nexus}"
-  pg_pw="$(current_env POSTGRES_PASSWORD)"
-  set_env DATABASE_URL "postgresql://${pg_user}:${pg_pw}@localhost:${PICKED_PORT[POSTGRES_HOST_PORT]}/${pg_db}"
-  ok "DATABASE_URL updated"
+pg_user="$(current_env POSTGRES_USER)"; pg_user="${pg_user:-nexus}"
+pg_db="$(current_env POSTGRES_DB)"; pg_db="${pg_db:-nexus}"
+pg_pw="$(current_env POSTGRES_PASSWORD)"
+expected_database_url="postgresql://${pg_user}:${pg_pw}@localhost:${PICKED_PORT[POSTGRES_HOST_PORT]}/${pg_db}"
+if [ "$(current_env DATABASE_URL)" != "$expected_database_url" ]; then
+  set_env DATABASE_URL "$expected_database_url"
+  ok "DATABASE_URL synced (port ${PICKED_PORT[POSTGRES_HOST_PORT]})"
+fi
+# Mirror in POSTGRES_PORT (sometimes consumed standalone).
+if [ "$(current_env POSTGRES_PORT)" != "${PICKED_PORT[POSTGRES_HOST_PORT]}" ]; then
+  set_env POSTGRES_PORT "${PICKED_PORT[POSTGRES_HOST_PORT]}"
+fi
 
-  set_env REDIS_URL "redis://localhost:${PICKED_PORT[REDIS_HOST_PORT]}"
-  ok "REDIS_URL updated"
+expected_redis="redis://localhost:${PICKED_PORT[REDIS_HOST_PORT]}"
+if [ "$(current_env REDIS_URL)" != "$expected_redis" ]; then
+  set_env REDIS_URL "$expected_redis"
+  ok "REDIS_URL synced"
+fi
+if [ "$(current_env REDIS_PORT)" != "${PICKED_PORT[REDIS_HOST_PORT]}" ]; then
+  set_env REDIS_PORT "${PICKED_PORT[REDIS_HOST_PORT]}"
+fi
 
-  set_env MEM0_API_URL "http://localhost:${PICKED_PORT[MEM0_HOST_PORT]}"
-  ok "MEM0_API_URL updated"
+expected_mem0="http://localhost:${PICKED_PORT[MEM0_HOST_PORT]}"
+if [ "$(current_env MEM0_API_URL)" != "$expected_mem0" ]; then
+  set_env MEM0_API_URL "$expected_mem0"
+  ok "MEM0_API_URL synced"
+fi
 
-  set_env ROCKETCHAT_URL "http://localhost:${PICKED_PORT[ROCKETCHAT_HOST_PORT]}"
-  ok "ROCKETCHAT_URL updated"
+expected_rc="http://localhost:${PICKED_PORT[ROCKETCHAT_HOST_PORT]}"
+if [ "$(current_env ROCKETCHAT_URL)" != "$expected_rc" ]; then
+  set_env ROCKETCHAT_URL "$expected_rc"
+  ok "ROCKETCHAT_URL synced"
+fi
 
-  # Update NEXUS_PUBLIC_URL only if it currently points at localhost
-  # (with a port suffix). For prod URLs (https://nexus.example.com),
-  # we leave it alone — the admin pre-set that and the gateway port
-  # behind a reverse proxy is already the proxy's choice.
-  cur_pub="$(current_env NEXUS_PUBLIC_URL)"
-  case "$cur_pub" in
-    *localhost:[0-9]*)
-      new_pub=$(printf '%s' "$cur_pub" | sed -E "s|:[0-9]+\$|:${PICKED_PORT[GATEWAY_PORT]}|")
+# Update NEXUS_PUBLIC_URL only if it currently points at localhost
+# (with a port suffix). For prod URLs (https://nexus.example.com), the
+# admin pre-set that and the gateway port behind a reverse proxy is
+# already the proxy's choice — leave it alone.
+cur_pub="$(current_env NEXUS_PUBLIC_URL)"
+case "$cur_pub" in
+  *localhost:[0-9]*)
+    new_pub=$(printf '%s' "$cur_pub" | sed -E "s|:[0-9]+\$|:${PICKED_PORT[GATEWAY_PORT]}|")
+    if [ "$cur_pub" != "$new_pub" ]; then
       set_env NEXUS_PUBLIC_URL "$new_pub"
       ok "NEXUS_PUBLIC_URL=$new_pub"
-      ;;
-  esac
-fi
+    fi
+    ;;
+esac
 
 # Always sync NEXUS_WEBHOOK_URL with the current GATEWAY_PORT — even if
 # nothing was relocated. The bootstrap script (step 7) uses this to
