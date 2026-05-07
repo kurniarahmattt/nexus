@@ -327,6 +327,17 @@ if [ "$any_relocation" = "true" ]; then
   esac
 fi
 
+# Always sync NEXUS_WEBHOOK_URL with the current GATEWAY_PORT — even if
+# nothing was relocated. The bootstrap script (step 7) uses this to
+# configure RC's outgoing webhook; if the wizard skipped it, RC would
+# call the default :4000 which may be a different process now.
+expected_webhook="http://host.docker.internal:${PICKED_PORT[GATEWAY_PORT]}/webhook"
+current_webhook="$(current_env NEXUS_WEBHOOK_URL)"
+if [ "$current_webhook" != "$expected_webhook" ]; then
+  set_env NEXUS_WEBHOOK_URL "$expected_webhook"
+  ok "NEXUS_WEBHOOK_URL=${expected_webhook}"
+fi
+
 # ---- step 4: install --------------------------------------------------------
 
 step 4 "Installing JS dependencies"
