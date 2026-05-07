@@ -15,6 +15,10 @@ endif
 POSTGRES_USER     ?= nexus
 POSTGRES_DB       ?= nexus
 ROCKETCHAT_URL    ?= http://localhost:3000
+GATEWAY_PORT      ?= 4000
+COMPOSER_PORT     ?= 4001
+RUNTIME_PORT      ?= 4002
+MEM0_HOST_PORT    ?= 4100
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -61,7 +65,7 @@ health: ## Probe health endpoints for all services
 	@echo "== Mongo =="
 	@$(DC) exec -T mongo mongosh --quiet --eval 'rs.status().ok' 2>&1 | tail -1 | sed 's/^/  /' || echo "  FAIL"
 	@echo "== Mem0 API =="
-	@curl -sS -o /dev/null -w "  HTTP %{http_code}\n" http://localhost:4100/health || echo "  FAIL"
+	@curl -sS -o /dev/null -w "  HTTP %{http_code}\n" http://localhost:$(MEM0_HOST_PORT)/health || echo "  FAIL"
 
 psql: ## Open psql shell on nexus database
 	$(DC) exec -it postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
@@ -190,9 +194,10 @@ services-status: ## Probe health of all host services + list tmux windows
 	@tmux list-windows -t $(TMUX_SESSION) 2>/dev/null || echo "  (no session '$(TMUX_SESSION)')"
 	@echo ""
 	@echo "== health =="
-	@for p in 4000 4001 4002 4100; do \
-	  printf "  :%s " $$p; \
-	  curl -sS --max-time 2 http://localhost:$$p/health 2>/dev/null | head -c 120 || echo "(no response)"; \
+	@for entry in "gateway:$(GATEWAY_PORT)" "composer:$(COMPOSER_PORT)" "runtime:$(RUNTIME_PORT)" "mem0:$(MEM0_HOST_PORT)"; do \
+	  name=$${entry%%:*}; port=$${entry##*:}; \
+	  printf "  %-9s :%-5s " $$name $$port; \
+	  curl -sS --max-time 2 http://localhost:$$port/health 2>/dev/null | head -c 120 || echo "(no response)"; \
 	  echo; \
 	done
 
