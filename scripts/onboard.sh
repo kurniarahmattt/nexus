@@ -86,6 +86,62 @@ else
   warn "memory: less than 6 GB; Rocket.Chat may be slow"
 fi
 
+# Port availability — fail-fast BEFORE we mutate any state. If any port
+# is taken, the stack will die later with EADDRINUSE; better to catch it
+# now while .env hasn't been generated and Docker hasn't pulled images.
+port_in_use() {
+  # ss is on most modern Linux distros; nc is the universal fallback.
+  if command -v ss >/dev/null 2>&1; then
+    ss -tlnH 2>/dev/null | awk '{print $4}' | grep -E ":${1}\$" >/dev/null
+  elif command -v nc >/dev/null 2>&1; then
+    nc -z 127.0.0.1 "$1" >/dev/null 2>&1
+  else
+    # Fallback: bash /dev/tcp probe (always available with bash 4+)
+    (echo > "/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1
+  fi
+}
+
+declare -A NEXUS_PORTS=(
+  [3000]="Rocket.Chat"
+  [27017]="MongoDB"
+  [5433]="Postgres"
+  [6380]="Redis"
+  [4100]="mem0-api"
+  [4000]="nexus-gateway"
+  [4001]="nexus-composer"
+  [4002]="nexus-runtime"
+)
+
+port_conflicts=()
+for port in "${!NEXUS_PORTS[@]}"; do
+  if port_in_use "$port"; then
+    port_conflicts+=("$port (${NEXUS_PORTS[$port]})")
+  fi
+done
+
+if [ ${#port_conflicts[@]} -gt 0 ]; then
+  echo
+  err "ports already in use: ${port_conflicts[*]}"
+  cat <<EOF
+
+  These ports must be free before the wizard continues. Find what's
+  holding each port and either stop it or move it to a different port.
+
+  Quick diagnostic:
+    ss -tlnp | grep -E ':(3000|27017|5433|6380|4100|4000|4001|4002)\b'
+
+  Common culprits:
+    • Old Nexus stack still running         → ${C_CYAN}make services-down && make down${C_RESET}
+    • Local Postgres on 5432 (mapped here)  → stop the local pg or change POSTGRES_PORT
+    • Other dev servers using 4000/4001     → stop them or move them
+
+  Re-run ${C_CYAN}nexus host-onboard${C_RESET} once the ports are clear.
+
+EOF
+  exit 1
+fi
+ok "all required ports are free"
+
 # ---- step 2: .env -----------------------------------------------------------
 
 step 2 "Configuring .env"
@@ -126,7 +182,14 @@ with open('.env', 'w') as f: f.writelines(out)
   fi
 }
 
-current_env() { grep -E "^$1=" .env | head -1 | cut -d= -f2-; }
+current_env() {
+  # Tolerate missing keys: grep returns 1 if no match, which under
+  # set -euo pipefail would silently kill the wizard. Wrap to always
+  # exit 0 with empty output if the key isn't present yet.
+  local v
+  v=$(grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- || true)
+  printf '%s' "$v"
+}
 
 # Workspace root.
 default_ws="$HOME/coding"
