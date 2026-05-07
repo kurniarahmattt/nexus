@@ -24,7 +24,7 @@ services:
       - --oplogSize=128
       - --bind_ip_all
     ports:
-      - "27017:27017"
+      - "${MONGO_HOST_PORT:-27017}:27017"
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
@@ -69,7 +69,7 @@ services:
       mongo-init:
         condition: service_completed_successfully
     ports:
-      - "3000:3000"
+      - "${ROCKETCHAT_HOST_PORT:-3000}:3000"
     environment:
       PORT: 3000
       ROOT_URL: ${ROCKETCHAT_URL:-http://localhost:3000}
@@ -103,7 +103,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_dev_pass}
       POSTGRES_DB: ${POSTGRES_DB:-nexus}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
@@ -120,7 +120,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:
-      - "6380:6379"
+      - "${REDIS_HOST_PORT:-6380}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -140,7 +140,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "4100:4100"
+      - "${MEM0_HOST_PORT:-4100}:4100"
     environment:
       POSTGRES_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD:-nexus_dev_pass}@postgres:5432/${POSTGRES_DB:-nexus}
       MEM0_LLM_PROVIDER: ${MEM0_LLM_PROVIDER:-openai}
