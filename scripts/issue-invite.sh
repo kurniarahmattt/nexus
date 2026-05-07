@@ -72,14 +72,14 @@ if [ -n "${CHANNELS:-}" ]; then
     LOGIN_RESP=$(curl -sfS -X POST -H "Content-Type: application/json" \
       -d "{\"user\":\"${RC_ADMIN_USER}\",\"password\":\"${RC_ADMIN_PASS}\"}" \
       "${RC_URL}/api/v1/login" 2>/dev/null || echo "")
-    TOK=$(printf '%s' "$LOGIN_RESP" | grep -oP '"authToken"\s*:\s*"\K[^"]+' | head -1 || true)
-    UID=$(printf '%s' "$LOGIN_RESP" | grep -oP '"userId"\s*:\s*"\K[^"]+' | head -1 || true)
-    if [ -z "$TOK" ] || [ -z "$UID" ]; then
+    RC_TOK=$(printf '%s' "$LOGIN_RESP" | grep -oP '"authToken"\s*:\s*"\K[^"]+' | head -1 || true)
+    RC_UID=$(printf '%s' "$LOGIN_RESP" | grep -oP '"userId"\s*:\s*"\K[^"]+' | head -1 || true)
+    if [ -z "$RC_TOK" ] || [ -z "$RC_UID" ]; then
       echo "  ! could not log in as admin (RC at ${RC_URL}); skipping channel pre-creation"
     else
       echo "Ensuring channels exist..."
       for ch in $(echo "$CHANNELS" | tr ',' ' '); do
-        info_resp=$(curl -sS -H "X-Auth-Token: ${TOK}" -H "X-User-Id: ${UID}" \
+        info_resp=$(curl -sS -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
           "${RC_URL}/api/v1/channels.info?roomName=${ch}" 2>/dev/null || echo "")
         case "$info_resp" in
           *'"success":true'*)
@@ -88,7 +88,7 @@ if [ -n "${CHANNELS:-}" ]; then
           *)
             # Try private group first if user pre-fixed with private intent? For
             # now we always create as public channel. Admin can change in UI.
-            create_resp=$(curl -sfS -X POST -H "X-Auth-Token: ${TOK}" -H "X-User-Id: ${UID}" \
+            create_resp=$(curl -sfS -X POST -H "X-Auth-Token: ${RC_TOK}" -H "X-User-Id: ${RC_UID}" \
               -H "Content-Type: application/json" \
               -d "{\"name\":\"${ch}\"}" \
               "${RC_URL}/api/v1/channels.create" 2>/dev/null || echo "")
