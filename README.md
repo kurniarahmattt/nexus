@@ -150,32 +150,36 @@ bridge tokens and cookies aren't sniffable.
 
 ## Quick Start
 
-Two flows depending on what you want:
+```bash
+curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash
+```
+
+Then run **one** of the two commands below.
 
 ### I'm hosting Nexus for my team
 
 ```bash
-git clone https://github.com/kurniarahmattt/nexus.git && cd nexus
-make onboard      # interactive wizard, ~5 min end-to-end
+nexus host-onboard
 ```
 
-The wizard checks prerequisites, generates strong secrets, brings up
-the docker stack, starts the host services in tmux, and bootstraps
-Rocket.Chat. Full walkthrough:
-**[docs.nexus → Set up a host](https://kurniarahmattt.github.io/nexus/guide/quick-start-host)**.
+The wizard checks prerequisites, generates strong secrets, clones the
+repo if needed, brings up the docker stack, starts the host services
+in tmux, and bootstraps Rocket.Chat — about 5 minutes end-to-end.
+Full walkthrough:
+**[docs → Set up a host](https://kurniarahmattt.github.io/nexus/guide/quick-start-host)**.
 
 ### I'm joining an existing Nexus as a bridge
 
-You don't need to clone anything. Once your admin sends you a token +
-config file:
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurniarahmattt/nexus/main/scripts/join-bridge.sh \
-  | bash -s -- --server <gateway-url> --token <token> --config ./<slug>.json
+nexus onboard
 ```
 
+Run this on your laptop after your team's admin has issued you a token
++ config file. The CLI prompts for the gateway URL, your token, and
+your config; downloads the bridge bundle from the host; stages
+everything under `~/.nexus/`; and connects.
 Full walkthrough:
-**[docs.nexus → Join as a bridge](https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge)**.
+**[docs → Join as a bridge](https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge)**.
 
 ### I have an AI assistant on this machine
 

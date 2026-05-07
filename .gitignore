@@ -22,8 +22,11 @@ bridges/*.json
 # Built artefacts
 services/web/dist/
 packages/nexus-bridge/dist/
+packages/nexus-cli/dist/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+# Built in CI by .github/workflows/docs.yml, served at /nexus/nexus.js
+docs/public/nexus.js
 
 # IDE
 .idea/

@@ -112,6 +112,14 @@ build-bridge: ## Bundle nexus-bridge.ts to single-file JS for user distribution
 	@echo "Bundle ready: packages/nexus-bridge/dist/nexus-bridge.js"
 	@echo "Served at: http://localhost:4000/admin/download/nexus-bridge.js"
 
+build-cli: ## Bundle the nexus CLI to a single Bun-runnable JS file
+	@mkdir -p packages/nexus-cli/dist
+	bun build packages/nexus-cli/bin/nexus.ts \
+	  --target=bun \
+	  --outfile=packages/nexus-cli/dist/nexus.js
+	@echo "Bundle ready: packages/nexus-cli/dist/nexus.js"
+	@echo "Served at: https://kurniarahmattt.github.io/nexus/nexus.js (after docs deploy)"
+
 web-dev: ## Run Vite dev server (5173) with /api proxy to gateway
 	cd services/web && bun run dev
 
