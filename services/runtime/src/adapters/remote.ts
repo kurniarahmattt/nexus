@@ -8,7 +8,16 @@
 import { randomUUID } from "node:crypto";
 import type { Adapter, AdapterContext, AdapterResult } from "./types.ts";
 
-const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:4000";
+// Build the gateway URL from explicit GATEWAY_URL (most flexible — admin
+// can put a non-localhost hostname when running runtime on a different
+// host) OR from GATEWAY_PORT (which the wizard auto-relocates if 4000
+// is taken). Hardcoding :4000 here was a long-standing bug: any
+// installation where the wizard moved the gateway to e.g. :4010 had
+// this adapter still POSTing to :4000 and getting "Failed to parse
+// JSON" when whatever else was on :4000 returned non-JSON.
+const GATEWAY_URL =
+  process.env.GATEWAY_URL ??
+  `http://localhost:${process.env.GATEWAY_PORT ?? 4000}`;
 
 export function makeRemoteAdapter(slug: string): Adapter {
   return {
