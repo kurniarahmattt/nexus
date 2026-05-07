@@ -154,27 +154,66 @@ For a multi-role onboarding, set `MAX_USES=3` and the dev can create
 backend / frontend / infra bridges from one invite — all auto-joining
 the channels the admin pre-approved.
 
-### Step 2 — Dev consumes it (one command)
+### Step 2 — Dev consumes it (one command, full setup)
 
 ```bash
 nexus onboard https://nexus.team.com/invite/<code>
 ```
 
-That's it. The CLI:
+That's it. The CLI walks you through the full bot setup interactively
+in four short stages, then connects:
 
-1. Detects the URL is `/invite/<code>` (vs `/join/<code>`).
-2. Prompts for the values that aren't on the invite — name (your role),
-   cwd (your laptop's project path), CLI (if the invite allows
-   multiple), username.
-3. POSTs to the gateway. The gateway:
-   - Validates the invite (expiry, uses_count, CLI allowlist, prefix).
-   - Creates the Rocket.Chat bot user (`@<cli>-<username>-<name>`).
-   - Inserts an `agents` row owned by your user.
-   - Issues a one-shot join URL (24 h TTL).
-   - **Auto-invites the bot to every channel in `default_channels`**.
-4. Returns: `{ slug, join_url, channels_invited: { ... } }`.
-5. CLI auto-chains into the join flow → bundle downloaded → bridge
-   connected → `bridge authenticated` log.
+#### Stage 1 — basic identity
+
+The CLI prompts for:
+
+- **Role / suffix** (e.g. `backend`) — becomes part of the slug
+- **Absolute path** to your project on this laptop (the `cwd` the bot
+  will read/write in)
+- **CLI** to wrap (`claude` / `cursor` / `gemini` / `hermes`)
+- **Your username** (defaults to `$USER`)
+
+Then it verifies the wrapped CLI binary is installed (`which claude`
+etc.) — if missing, prints an install hint and asks whether to
+proceed anyway.
+
+#### Stage 2 — chat appearance
+
+- **Display name** — shown in member list and message author. Default
+  is auto-generated from slug (you can press Enter to accept).
+- **Description** — one-liner shown in admin listings (optional, can
+  be empty).
+
+#### Stage 3 — persona (system prompt)
+
+The CLI offers to open `$EDITOR` with a pre-filled persona template
+(slug, owner, cli, cwd already plugged in; "Operating rules" /
+"Scope" / "Voice" sections to customize). Save and quit to apply.
+
+::: tip Skip if you want defaults for now
+Answer "no" to the customize prompt and a generic persona is used.
+You can edit later anytime with `nexus persona <slug>`.
+:::
+
+#### Stage 4 — persistence (Linux only)
+
+Asks whether to register a systemd user unit so the bridge auto-starts
+on boot and reconnects after crashes. `nexus onboard` writes the unit
+file; you'll see the `systemctl --user enable --now …` command at the
+end.
+
+#### Then the CLI submits
+
+POSTs to the gateway with everything you provided. The gateway:
+
+- Validates the invite (expiry, uses_count, CLI allowlist, prefix)
+- Creates the Rocket.Chat bot user with your display name + persona
+- Inserts an `agents` row owned by your user
+- **Auto-invites the bot to every channel in `default_channels`**
+- Issues a one-shot join URL (24 h TTL)
+
+Then auto-chains into `nexus onboard <join-url>`: bundle download →
+bridge connect → `bridge authenticated` log.
 
 ::: details Want non-interactive? Use the underlying `request-bridge` directly.
 ```bash
@@ -188,13 +227,19 @@ This is the same flow `nexus onboard <invite-url>` runs, just with
 flags instead of prompts. Useful for shell scripts or CI.
 :::
 
-### Step 3 — Customize
+### Step 3 — Customize later (anytime)
 
-After the bridge is running, fine-tune the persona / display name:
+Whatever you set during onboard isn't permanent — change anything later
+without a restart-from-scratch:
 
 ```bash
-nexus persona claude-alice-backend
+nexus persona claude-alice-backend                     # interactive picker
+nexus persona claude-alice-backend --field display_name --value "..."
+nexus persona claude-alice-backend --edit              # opens \$EDITOR
 ```
+
+Saves to `~/.nexus/<slug>.json` on your laptop, then offers to restart
+the bridge so the new identity propagates to the host.
 
 ### Channel scope: who decides what
 
