@@ -18,6 +18,7 @@ import {
   insertMessage,
   type AgentRow,
 } from "./db.ts";
+import { pool } from "./db.ts";
 import { invokeQueue, redisConnection } from "./queues.ts";
 import { fireMem0Add } from "./mem0.ts";
 import { detectLandmarks, persistLandmarks } from "./landmarks.ts";
@@ -153,6 +154,137 @@ app.get("/admin/*", async (c) => {
 });
 // Redirect /admin (no trailing slash) to /admin/
 app.get("/admin", (c) => c.redirect("/admin/"));
+
+// ── Bridge join codes (one-shot credential exchange) ─────────────────
+// GET /join/:code  → preview only (HTML + safe JSON, NO consumption)
+// POST /join/:code → consume (returns full credentials, marks consumed)
+app.get("/join/:code", async (c) => {
+  const code = c.req.param("code");
+  const accept = c.req.header("accept") ?? "";
+  const wantsJson = accept.includes("application/json");
+
+  const { rows } = await pool.query(
+    `SELECT j.code, j.agent_slug, j.expires_at, j.consumed_at
+       FROM bridge_join_codes j
+      WHERE j.code = $1`,
+    [code],
+  );
+
+  if (rows.length === 0) {
+    return wantsJson
+      ? c.json({ error: "invalid_code" }, 404)
+      : c.html(joinErrorPage("Invalid join code", "This join link does not match any issued code."), 404);
+  }
+  const row = rows[0]!;
+  if (row.consumed_at) {
+    return wantsJson
+      ? c.json({ error: "already_used", consumed_at: row.consumed_at }, 410)
+      : c.html(joinErrorPage("Already used", "This join link has already been consumed. Ask your admin to issue a new one."), 410);
+  }
+  if (new Date(row.expires_at) < new Date()) {
+    return wantsJson
+      ? c.json({ error: "expired", expires_at: row.expires_at }, 410)
+      : c.html(joinErrorPage("Expired", `This join link expired at ${row.expires_at}. Ask your admin to issue a new one.`), 410);
+  }
+
+  return wantsJson
+    ? c.json({ slug: row.agent_slug, expires_at: row.expires_at, ready: true })
+    : c.html(joinPreviewPage(c.req.url, row.agent_slug, row.expires_at));
+});
+
+app.post("/join/:code", async (c) => {
+  const code = c.req.param("code");
+  const ip =
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
+    c.req.header("x-real-ip") ??
+    "unknown";
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT j.code, j.agent_slug, j.expires_at, j.consumed_at,
+              a.config, a.kind
+         FROM bridge_join_codes j
+         JOIN agents a ON a.slug = j.agent_slug
+        WHERE j.code = $1
+        FOR UPDATE`,
+      [code],
+    );
+    if (rows.length === 0) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "invalid_code" }, 404);
+    }
+    const row = rows[0]!;
+    if (row.consumed_at) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "already_used" }, 410);
+    }
+    if (new Date(row.expires_at) < new Date()) {
+      await client.query("ROLLBACK");
+      return c.json({ error: "expired" }, 410);
+    }
+
+    await client.query(
+      `UPDATE bridge_join_codes SET consumed_at = now(), consumed_from = $1 WHERE code = $2`,
+      [ip, code],
+    );
+    await client.query("COMMIT");
+
+    const cfg = row.config as Record<string, unknown>;
+    const bridge = (cfg.bridge ?? {}) as Record<string, unknown>;
+    const wsUrl = env.NEXUS_PUBLIC_URL.replace(/^http/, "ws") + "/bridge";
+
+    return c.json({
+      slug: row.agent_slug,
+      server: wsUrl,
+      bridge_token: bridge.token,
+      config: {
+        slug: row.agent_slug,
+        display_name: cfg.display_name ?? row.agent_slug,
+        description: cfg.description ?? "",
+        persona: cfg.system_prompt ?? "",
+        cwd: bridge.cwd,
+        cli_kind: bridge.cli_kind,
+        model: cfg.model ?? "",
+      },
+    });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    log.error({ err, code }, "join code consume failed");
+    return c.json({ error: "internal" }, 500);
+  } finally {
+    client.release();
+  }
+});
+
+function joinPreviewPage(joinUrl: string, slug: string, expiresAt: Date | string): string {
+  const expIso = typeof expiresAt === "string" ? expiresAt : expiresAt.toISOString();
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>Nexus join</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; color: #222; line-height: 1.5; }
+  code { background: #f4f4f4; padding: 0.15em 0.35em; border-radius: 3px; }
+  .cmd { background: #1e1e1e; color: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, monospace; }
+  .meta { color: #666; font-size: 0.9em; margin-top: 2rem; }
+  .warn { background: #fff4d6; border-left: 4px solid #d6a700; padding: 0.75rem 1rem; border-radius: 4px; margin: 1rem 0; }
+</style></head><body>
+<h1>Nexus join link</h1>
+<p>This link is for connecting <code>${slug}</code> to a Nexus host. Run this on the laptop where the bridge will live:</p>
+<div class="cmd">nexus onboard ${joinUrl}</div>
+<p>Don't have the CLI yet?</p>
+<div class="cmd">curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash</div>
+<div class="warn"><strong>One-shot.</strong> The first POST to this URL consumes the code; opening it in a browser does not. After consumption, the link returns 410 Gone.</div>
+<p class="meta">Expires: ${expIso}</p>
+</body></html>`;
+}
+
+function joinErrorPage(title: string, body: string): string {
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>body { font-family: system-ui, sans-serif; max-width: 560px; margin: 4rem auto; padding: 0 1rem; }</style>
+</head><body><h1>${title}</h1><p>${body}</p></body></html>`;
+}
 
 app.post("/webhook", async (c) => {
   // Rocket.Chat posts the integration's configured token in the payload's

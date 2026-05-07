@@ -13,6 +13,8 @@ file.
 | `POSTGRES_PASSWORD`         | Postgres superuser. **Replace** the dev default.         |
 | `DATABASE_URL`              | Full connection URL — must include the password above.   |
 | `NEXUS_WEBHOOK_TOKEN`       | RC → gateway webhook auth. **Replace** before any non-LAN deploy. |
+| `NEXUS_PUBLIC_URL`          | Externally-reachable origin. Used to build join URLs (`<NEXUS_PUBLIC_URL>/join/<code>`) issued by `make create-bridge` / `make issue-join-link`. Defaults to `http://localhost:4000`; set to your real LAN IP / domain before sharing any URL. |
+| `NEXUS_JOIN_TTL_HOURS`      | Default lifetime (in hours) of a one-shot join code. Default `24`. Lower = less leak window; higher = more flexibility. |
 
 ## Rocket.Chat
 

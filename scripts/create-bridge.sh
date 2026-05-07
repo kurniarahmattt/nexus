@@ -204,25 +204,46 @@ JSON
   log "wrote config template: ${CONFIG_PATH}"
 fi
 
+# ---- Issue a join URL (one-shot, time-bounded) ------------------------------
+JOIN_TTL_HOURS="${NEXUS_JOIN_TTL_HOURS:-24}"
+JOIN_CODE="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-22)"
+PUBLIC_URL="${NEXUS_PUBLIC_URL:-http://localhost:4000}"
+
+docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 <<SQL > /dev/null
+INSERT INTO bridge_join_codes (code, agent_slug, issued_by, expires_at)
+VALUES (
+  '${JOIN_CODE}',
+  '${SLUG}',
+  '${USER_UUID}'::uuid,
+  now() + interval '${JOIN_TTL_HOURS} hours'
+);
+SQL
+
+JOIN_URL="${PUBLIC_URL}/join/${JOIN_CODE}"
+
 # ---- Summary ----
 echo ""
 log "bridge '${SLUG}' ready."
 echo ""
 echo "  SLUG:    ${SLUG}"
 echo "  BOT:     @${SLUG}  →  ${BOT_DISPLAY}"
-echo "  SERVER:  ws://$(hostname -I | awk '{print $1}'):4000/bridge"
-echo "  TOKEN:   ${BRIDGE_TOKEN}"
 echo "  CWD:     ${CWD}"
 echo "  CLI:     ${CLI}"
 echo "  CONFIG:  ${CONFIG_PATH}"
 echo ""
-echo "  1) Edit the config file above — persona, display_name, description."
-echo "  2) Hand the token + config to ${USERNAME} (it contains secrets)."
-echo "  3) On ${USERNAME}'s PC:"
-echo "       NEXUS_BRIDGE_TOKEN=${BRIDGE_TOKEN} \\"
-echo "       bun packages/nexus-bridge/bin/nexus-bridge.ts \\"
-echo "         --config ./${SLUG}.json \\"
-echo "         --server ws://<nexus-host>:4000/bridge"
-echo "  4) Invite bot to a channel:"
-echo "       make invite-bot SLUG=${SLUG} CHANNEL=<channel-name>"
+echo "  ${JOIN_URL}"
+echo ""
+log "JOIN URL above — one-shot, expires in ${JOIN_TTL_HOURS}h. Edit the persona"
+log "in ${CONFIG_PATH} BEFORE sending the URL (the config is fetched from this DB"
+log "row when the dev consumes the link)."
+echo ""
+echo "  Send to ${USERNAME} via a private channel (Signal / password manager)."
+echo "  On their laptop, ${USERNAME} runs:"
+echo ""
+echo "    nexus onboard ${JOIN_URL}"
+echo ""
+echo "  After they connect, invite the bot to a channel:"
+echo "    make invite-bot SLUG=${SLUG} CHANNEL=<channel-name>"
+echo ""
+echo "  To re-issue a fresh URL later: make issue-join-link SLUG=${SLUG}"
 echo ""

@@ -55,8 +55,10 @@ Run `make help` to see this list with one-line descriptions inline.
 
 | Target                                       | What it does                                       |
 |----------------------------------------------|----------------------------------------------------|
-| `make create-bridge USER=<u> CWD=<path>`     | Provision a per-user bridge. Optional `NAME=<role>`, `CLI=<kind>`. Prints token + config path. |
+| `make create-bridge USER=<u> CWD=<path>`     | Provision a per-user bridge AND issue a one-shot join URL. Optional `NAME=<role>`, `CLI=<kind>`. |
+| `make issue-join-link SLUG=<slug>`           | Re-issue a fresh one-shot join URL for an existing bridge (e.g. when the previous URL was lost or expired). Optional `NEXUS_JOIN_TTL_HOURS=N`. |
 | `make build-bridge`                          | Bundle `nexus-bridge.ts` to a single-file JS for distribution |
+| `make build-cli`                             | Bundle the `nexus` CLI to `packages/nexus-cli/dist/nexus.js` |
 | `make invite-bot SLUG=<slug> CHANNEL=<name>` | Invite a bridge bot to a Rocket.Chat channel       |
 | `make list-bridges`                          | Show every bridge + last-seen timestamp            |
 
