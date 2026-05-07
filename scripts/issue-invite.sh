@@ -58,6 +58,53 @@ if [ -n "$USER_UUID" ]; then
   ALLOWED_USER_SQL="'${USER_UUID}'::uuid"
 fi
 
+# Auto-ensure each channel in CHANNELS= exists in Rocket.Chat. If a
+# channel is missing, create it via the admin REST API. The admin
+# already has rights to create channels, so this saves a context switch
+# to the RC UI before issuing invites.
+if [ -n "${CHANNELS:-}" ]; then
+  RC_URL="${ROCKETCHAT_URL:-http://localhost:3000}"
+  RC_ADMIN_USER="${ROCKETCHAT_ADMIN_USERNAME:-admin}"
+  RC_ADMIN_PASS="${ROCKETCHAT_ADMIN_PASSWORD:-}"
+  if [ -z "$RC_ADMIN_PASS" ]; then
+    echo "  ! ROCKETCHAT_ADMIN_PASSWORD not set; skipping channel pre-creation"
+  else
+    LOGIN_RESP=$(curl -sfS -X POST -H "Content-Type: application/json" \
+      -d "{\"user\":\"${RC_ADMIN_USER}\",\"password\":\"${RC_ADMIN_PASS}\"}" \
+      "${RC_URL}/api/v1/login" 2>/dev/null || echo "")
+    TOK=$(printf '%s' "$LOGIN_RESP" | grep -oP '"authToken"\s*:\s*"\K[^"]+' | head -1 || true)
+    UID=$(printf '%s' "$LOGIN_RESP" | grep -oP '"userId"\s*:\s*"\K[^"]+' | head -1 || true)
+    if [ -z "$TOK" ] || [ -z "$UID" ]; then
+      echo "  ! could not log in as admin (RC at ${RC_URL}); skipping channel pre-creation"
+    else
+      echo "Ensuring channels exist..."
+      for ch in $(echo "$CHANNELS" | tr ',' ' '); do
+        info_resp=$(curl -sS -H "X-Auth-Token: ${TOK}" -H "X-User-Id: ${UID}" \
+          "${RC_URL}/api/v1/channels.info?roomName=${ch}" 2>/dev/null || echo "")
+        case "$info_resp" in
+          *'"success":true'*)
+            echo "  ✓ #${ch} already exists"
+            ;;
+          *)
+            # Try private group first if user pre-fixed with private intent? For
+            # now we always create as public channel. Admin can change in UI.
+            create_resp=$(curl -sfS -X POST -H "X-Auth-Token: ${TOK}" -H "X-User-Id: ${UID}" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"${ch}\"}" \
+              "${RC_URL}/api/v1/channels.create" 2>/dev/null || echo "")
+            if printf '%s' "$create_resp" | grep -q '"success":true'; then
+              echo "  ✓ #${ch} created"
+            else
+              echo "  ! #${ch} create FAILED — bridge will be issued anyway, but auto-invite to this channel will fail."
+              echo "    Response: $(printf '%s' "$create_resp" | head -c 200)"
+            fi
+            ;;
+        esac
+      done
+    fi
+  fi
+fi
+
 INVITE_CODE="$(openssl rand -base64 32 | tr -d '=+/' | cut -c1-28)"
 
 docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 > /dev/null <<SQL
