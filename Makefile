@@ -22,6 +22,9 @@ help: ## Show this help
 setup: ## First-time: copy .env.example to .env if missing
 	@if [ ! -f .env ]; then cp .env.example .env && echo "Created .env from template. Review values before 'make up'."; else echo ".env already exists."; fi
 
+onboard: ## One-shot interactive host setup (recommended for first-time users)
+	@bash scripts/onboard.sh
+
 install: ## Install JS dependencies for all workspaces
 	bun install
 

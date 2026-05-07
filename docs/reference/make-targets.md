@@ -6,6 +6,7 @@ Run `make help` to see this list with one-line descriptions inline.
 
 | Target          | What it does                                                |
 |-----------------|-------------------------------------------------------------|
+| `make onboard`  | **Recommended for first-time host setup.** Interactive wizard that runs the rest of the setup steps end-to-end with progress reporting. |
 | `make setup`    | Copies `.env.example` → `.env` if missing                   |
 | `make install`  | `bun install` for all workspaces                            |
 
