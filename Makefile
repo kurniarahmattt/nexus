@@ -90,6 +90,10 @@ invite-bot: ## Invite a bot to an RC channel. SLUG=<slug> CHANNEL=<name>
 	@[ -n "$(CHANNEL)" ] || { echo "CHANNEL=<name> required"; exit 1; }
 	@bash scripts/invite-bot.sh --slug $(SLUG) --channel $(CHANNEL)
 
+issue-join-link: ## Issue a fresh one-shot join URL for an existing bridge. SLUG=<slug>
+	@[ -n "$(SLUG)" ] || { echo "SLUG=<slug> required"; exit 1; }
+	@SLUG=$(SLUG) bash scripts/issue-join-link.sh
+
 list-bridges: ## Show all remote bridges + connection state
 	@curl -sS http://localhost:4000/health | python3 -c "import json,sys; d=json.load(sys.stdin); \
 	  print('Connected bridges:', len(d.get('bridges',[]))); \

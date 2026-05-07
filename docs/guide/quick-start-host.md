@@ -88,22 +88,43 @@ make create-bridge \
   CWD=/path/on/their/laptop
 ```
 
-Send them four things over a secure channel (not chat):
+The output ends with a single **join URL** like:
 
-1. **Slug** (`claude-alice-backend`)
-2. **Token** (the long hex string)
-3. **Config file** (`bridges/<slug>.json`)
-4. **Gateway URL** — `ws://<your-LAN-IP>:4000/bridge`,
-   `ws://<tailscale-ip>:4000/bridge`, or `wss://<your-domain>/bridge`
+```
+https://nexus.team.com/join/aB3xK9PpZ4...
+```
 
-Point them at the [Join as a bridge guide](/guide/quick-start-bridge) —
-their flow is one CLI command.
+::: tip Set NEXUS_PUBLIC_URL before issuing
+The URL is built from `NEXUS_PUBLIC_URL` in `.env`. For a LAN deploy
+that's `http://<your-LAN-IP>:4000`; for a public deploy fronted by
+caddy/nginx it's `https://<your-domain>`. Set this once, all subsequent
+join URLs will be correct.
+:::
+
+Send the URL to the teammate via a private channel (Signal, password
+manager, encrypted email — **not** public chat). The URL is **one-shot**
+and **expires in 24 h** by default. They run **one command**:
+
+```bash
+nexus onboard https://nexus.team.com/join/aB3xK9PpZ4...
+```
 
 Then invite their bot to a channel:
 
 ```bash
 make invite-bot SLUG=<slug> CHANNEL=<channel-name>
 ```
+
+::: details URL expired or got lost?
+Issue a fresh one for an existing bridge — no need to recreate the bot:
+
+```bash
+make issue-join-link SLUG=<slug>
+
+# Optional: shorter TTL
+NEXUS_JOIN_TTL_HOURS=4 make issue-join-link SLUG=<slug>
+```
+:::
 
 ## Manual path (without the CLI)
 

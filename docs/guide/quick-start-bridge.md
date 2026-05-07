@@ -9,7 +9,7 @@ If you're the one *hosting* the team's Nexus instance, you want the
 [Set up a host](/guide/quick-start-host) page instead.
 :::
 
-## Step 1 of 4 — Install the CLI
+## Step 1 of 3 — Install the CLI
 
 ```bash
 curl -fsSL https://kurniarahmattt.github.io/nexus/install.sh | bash
@@ -22,7 +22,7 @@ drops a `nexus` command into `~/.local/bin/`. Verify:
 nexus version
 ```
 
-## Step 2 of 4 — Get your credentials
+## Step 2 of 3 — Get a join URL from your admin
 
 Ask your team's Nexus admin to run, on the host:
 
@@ -34,80 +34,63 @@ make create-bridge \
   CWD=/path/on/your/laptop
 ```
 
-They'll send you four things:
+They'll send you **one** thing — a join URL that looks like:
 
-| You receive       | Looks like                                    |
-|-------------------|-----------------------------------------------|
-| **Slug**          | `claude-yourname-backend`                     |
-| **Token**         | `1a2b3c4d5e6f7890...` (long hex)              |
-| **Config file**   | `claude-yourname-backend.json`                |
-| **Gateway URL**   | `ws://192.168.1.10:4000/bridge` *or* `wss://nexus.team.com/bridge` |
+```
+https://nexus.team.com/join/aB3xK9PpZ4...
+```
 
-::: warning Treat the token as a credential
-Anyone with the token can impersonate your bot. Don't paste it in
-chat, screenshots, or shell history. Store it in a password manager.
+::: warning Treat the join URL as a credential
+The URL is **one-shot** (consumed on first use) and **time-bounded**
+(expires in 24 h by default), but if it leaks before you use it,
+someone else could claim your bot identity. Send via Signal, password
+manager, or encrypted email — not in public chat.
 :::
 
-## Step 3 of 4 — Verify your CLI is installed
+::: details What if my admin still uses the legacy 4-fields handoff?
+If you got a slug + token + config file + gateway URL instead, see
+[Legacy onboarding](#legacy-onboarding) at the bottom of this page.
+:::
 
-The bridge wraps the CLI you already use. Confirm it runs:
+## Step 3 of 3 — Connect
+
+Make sure the CLI you'll bridge is installed:
 
 ::: code-group
 
 ```bash [Claude Code]
-which claude
-claude --version
+which claude && claude --version
 ```
 
 ```bash [Cursor Agent]
-which cursor-agent
-cursor-agent --version
+which cursor-agent && cursor-agent --version
 ```
 
 ```bash [Gemini CLI]
-which gemini
-gemini --version
+which gemini && gemini --version
 ```
 
 ```bash [Hermes]
-which hermes
-hermes --version
+which hermes && hermes --version
 ```
 
 :::
 
-If any is missing, install per the CLI's own docs.
-
-## Step 4 of 4 — Connect
-
-Save the config file your admin sent you, then run:
+Then:
 
 ```bash
-nexus onboard
+nexus onboard https://nexus.team.com/join/aB3xK9PpZ4...
 ```
 
-The CLI prompts for:
-
-1. The gateway URL (e.g. `wss://nexus.team.com/bridge`)
-2. Your bridge token
-3. Path to the JSON config the admin sent you
-
-Or pass them as flags:
-
-```bash
-nexus onboard \
-  --server  wss://nexus.team.com/bridge \
-  --token   <your-token> \
-  --config  ./<slug>.json
-```
-
-What happens:
+The CLI:
 
 1. ✅ Verifies Bun is installed.
-2. 📥 Downloads the prebuilt `nexus-bridge.js` from the host gateway
-   (`<server>/admin/download/nexus-bridge.js`, derived from the URL).
-3. 📁 Stages your config under `~/.nexus/<slug>.json`.
-4. ⚡ Connects and stays in the foreground until `Ctrl-C`.
+2. 📥 Refuses plain `http://` URLs (use `--allow-insecure` for LAN-only).
+3. 🔁 POSTs to the URL → server consumes the code, returns slug,
+   gateway WebSocket URL, bridge token, and persona config in one shot.
+4. 📁 Stages the config under `~/.nexus/<slug>.json`.
+5. 📦 Downloads `nexus-bridge.js` from the host.
+6. ⚡ Connects and stays in the foreground until `Ctrl-C`.
 
 You should see, within ~2 seconds:
 
@@ -125,7 +108,7 @@ Add `--persistent` and the CLI registers a systemd user unit (Linux
 only):
 
 ```bash
-nexus onboard --server wss://… --token … --config ./bridge.json --persistent
+nexus onboard https://nexus.team.com/join/<code> --persistent
 ```
 
 Then enable it:
@@ -193,6 +176,29 @@ The bundle has to be served from the gateway at
 ::: details Bot replies but with nonsense
 Persona mismatch. Edit `~/.nexus/<slug>.json`, restart the bridge.
 :::
+
+## Legacy onboarding
+
+If you got 4 separate items from your admin instead of one URL (older
+hosts that haven't upgraded yet):
+
+```bash
+nexus onboard \
+  --server  wss://nexus.team.com/bridge \
+  --token   <your-token> \
+  --config  ./<slug>.json
+```
+
+Or interactively:
+
+```bash
+nexus onboard
+# (it will ask you whether you have a join URL; say "no" and it falls
+# back to the legacy 3-prompt flow)
+```
+
+This works exactly the same as the URL flow once the credentials are
+collected.
 
 ## What's next
 
