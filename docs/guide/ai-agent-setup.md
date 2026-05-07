@@ -120,6 +120,6 @@ to remind your AI of them.
 
 ## See also
 
-- [Quick start](/guide/quick-start) — the manual five-step path.
+- [Quick start](/guide/quick-start) — pick host or bridge flow.
 - [Add an AI partner (bridge)](/guide/bridges) — what the host admin
   does to issue you a bridge.

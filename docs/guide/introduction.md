@@ -85,6 +85,6 @@ on GitHub for the source of truth.
 ## Next
 
 - **[Architecture](/guide/architecture)** — diagram and topology.
-- **[Quick start](/guide/quick-start)** — five-step setup on your machine.
+- **[Quick start](/guide/quick-start)** — pick the host or bridge flow.
 - **[Hand setup to your AI](/guide/ai-agent-setup)** — let your local AI
   assistant install Nexus for you.

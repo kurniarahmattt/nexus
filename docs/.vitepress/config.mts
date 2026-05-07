@@ -67,12 +67,20 @@ export default defineConfig({
           text: "Getting started",
           collapsed: false,
           items: [
-            { text: "Quick start", link: "/guide/quick-start" },
+            { text: "Quick start (chooser)", link: "/guide/quick-start" },
+            { text: "Set up a host", link: "/guide/quick-start-host" },
+            { text: "Join as a bridge", link: "/guide/quick-start-bridge" },
             {
               text: "Hand setup to your AI",
               link: "/guide/ai-agent-setup",
             },
-            { text: "Add an AI partner (bridge)", link: "/guide/bridges" },
+          ],
+        },
+        {
+          text: "Going deeper",
+          collapsed: false,
+          items: [
+            { text: "Bridges (full reference)", link: "/guide/bridges" },
             {
               text: "Multi-developer collaboration",
               link: "/guide/multi-dev-collab",

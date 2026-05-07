@@ -91,7 +91,6 @@ CLI binaries bundled.
 
 - **[Who runs what](/guide/topology)** — host options and team-size
   scenarios.
-- **[Quick start](/guide/quick-start)** — get the stack running in five
-  steps.
+- **[Quick start](/guide/quick-start)** — pick host or bridge flow.
 - **[Components](/concepts/components)** — deeper dive into each
   service.

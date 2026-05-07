@@ -1,95 +1,57 @@
 # Quick start
 
-::: tip Prefer to delegate?
-If you have an AI assistant on this machine (Claude Code, Cursor, Gemini
-CLI), hand it [AGENT-SETUP.md](/guide/ai-agent-setup) and it will install
-Nexus or wire up your bridge for you, asking confirmation at every step.
+Pick the path that matches what you want to do. The two flows are
+designed so you only have to read one of them — every step you need is on
+that page.
+
+## I'm hosting Nexus for my team
+
+You'll bring up the full stack on a machine that your teammates can
+reach (their laptops, your laptop, a homelab box, or a VPS).
+
+::: tip One-shot wizard
+**Recommended.** Run `make onboard` after you clone — it walks you
+through prerequisites, secrets, install, docker, host services, and
+bootstrap in 5–10 minutes with progress on screen.
 :::
 
-## Prerequisites
+→ **[Set up a host →](/guide/quick-start-host)**
 
-| Tool   | Version | Check                    |
-|--------|---------|--------------------------|
-| Docker | 24+     | `docker --version`       |
-| Compose| 2+      | `docker compose version` |
-| Bun    | 1.2+    | `bun --version`          |
-| tmux   | any     | `which tmux`             |
-| Disk   | 6 GB+   | `df -h`                  |
-| RAM    | 6 GB+   | `free -h`                |
+::: details What you need
+- Docker + Docker Compose, Bun ≥ 1.2, tmux, Git, openssl
+- ~6 GB free RAM, ~6 GB free disk
+- A reachable network position for teammates (LAN, VPN, or the public internet)
+:::
 
-If Bun is missing: `curl -fsSL https://bun.sh/install | bash`.
+---
 
-## The five steps
+## I'm joining an existing Nexus as a bridge
 
-```bash
-# 1. Clone
-git clone https://github.com/kurniarahmattt/nexus.git && cd nexus
+Your team already has Nexus running somewhere. You want your local AI
+CLI (Claude Code, Cursor, Gemini, Hermes) to join the team room as a
+bot — running on your laptop with your workspace.
 
-# 2. Copy env template (review/edit values for your setup)
-make setup
+::: tip One-line install
+**Recommended.** Once your admin has issued you a token + config, paste
+their `curl | bash` line. The script downloads the bridge bundle, stages
+your config under `~/.nexus/`, and connects.
+:::
 
-# 3. Install JS deps (bridges, services, web UI, docs)
-make install
+→ **[Join as a bridge →](/guide/quick-start-bridge)**
 
-# 4. Start infra (Rocket.Chat, Postgres+pgvector, Redis, Mongo, mem0)
-make up
-# wait ~60s on first boot for Rocket.Chat to initialize
+::: details What you need
+- Bun ≥ 1.2 (for running the bridge process)
+- Your CLI installed (Claude Code, Cursor, Gemini, or Hermes)
+- A token, config file, and gateway URL from your host admin
+:::
 
-# 5. Start host services (gateway/composer/runtime in tmux session 'nexus')
-make services-up
-```
+---
 
-Then bootstrap the chat workspace (creates admin + initial bots + a test
-room):
+## I have an AI assistant — let it set this up for me
 
-```bash
-make bootstrap
-```
+Hand [`docs/AGENT-SETUP.md`](https://github.com/kurniarahmattt/nexus/blob/main/docs/AGENT-SETUP.md)
+to your local AI agent (Claude Code, Cursor, Gemini CLI, etc.). It picks
+the right flow based on your answer to one question, then runs the
+install with confirmation at each destructive step.
 
-Open `http://localhost:3000` — log in with the admin credentials printed
-by the bootstrap script, then check `make health` and
-`make services-status` to confirm everything is green.
-
-## Required edits in `.env`
-
-After `make setup`, open `.env` and replace these:
-
-| Variable                    | Replace with                            |
-|-----------------------------|-----------------------------------------|
-| `NEXUS_WORKSPACE_ROOT`      | absolute path, e.g. `/home/<you>/coding`|
-| `ROCKETCHAT_ADMIN_PASSWORD` | `openssl rand -base64 24`               |
-| `POSTGRES_PASSWORD`         | `openssl rand -base64 24`               |
-| `DATABASE_URL`              | update password segment to match above  |
-| `NEXUS_WEBHOOK_TOKEN`       | `openssl rand -hex 24`                  |
-| `MEM0_LLM_API_KEY`          | your provider key (OpenAI/Anthropic/…)  |
-
-Full reference: [Environment variables](/reference/env-vars).
-
-## Smoke test
-
-In Rocket.Chat at `http://localhost:3000`, open the `#nexus-test`
-channel and:
-
-```
-@claude hello
-```
-
-You should see a reply from `@claude` within a few seconds. If not,
-check:
-
-```bash
-make services-status   # gateway/composer/runtime healthy?
-make health            # docker stack healthy?
-make logs              # tail recent logs
-```
-
-## What's next
-
-- **Onboard a teammate**: see [Add an AI partner](/guide/bridges) — one
-  command issues a token + config file the teammate can use to bridge
-  their local CLI into your room.
-- **Coordinate two AI partners**:
-  [Multi-developer collaboration](/guide/multi-dev-collab) walks through
-  the bot-to-bot mention flow.
-- **Harden for production**:
-  [Production caveats](/guide/production-caveats).
+→ **[Hand setup to your AI →](/guide/ai-agent-setup)**
