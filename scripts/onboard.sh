@@ -368,6 +368,25 @@ step 4 "Installing JS dependencies"
 bun install --silent
 ok "dependencies installed"
 
+# Build the per-user nexus-bridge bundle so the gateway can serve it at
+# /admin/download/nexus-bridge.js. Without this, every `nexus onboard`
+# attempt against this host would fail to fetch the bundle. We do it
+# unconditionally — `bun build` is fast (~1s), idempotent, and the
+# alternative is a confusing "could not fetch bundle" error during a
+# dev's first connection.
+info "building nexus-bridge bundle (served at /admin/download/nexus-bridge.js)..."
+mkdir -p packages/nexus-bridge/dist
+bun build packages/nexus-bridge/bin/nexus-bridge.ts \
+  --target=bun \
+  --outfile=packages/nexus-bridge/dist/nexus-bridge.js \
+  --silent 2>&1 | sed 's/^/  /' || warn "bridge bundle build had warnings — check by running \`make build-bridge\`"
+if [ -f packages/nexus-bridge/dist/nexus-bridge.js ]; then
+  ok "bridge bundle built ($(wc -c < packages/nexus-bridge/dist/nexus-bridge.js | tr -d ' ') bytes)"
+else
+  err "bridge bundle missing after build"
+  exit 1
+fi
+
 # ---- step 5: docker stack ---------------------------------------------------
 
 step 5 "Starting docker stack"
