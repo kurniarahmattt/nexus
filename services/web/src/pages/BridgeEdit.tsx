@@ -85,7 +85,7 @@ curl -O http://${serverHost}/admin/download/nexus-bridge.js
 NEXUS_BRIDGE_TOKEN=${form.bridge_token} \\
   bun nexus-bridge.js \\
     --config ./${slug}.json \\
-    --server ws://${serverHost.split(':')[0]}:4000/bridge`;
+    --server ws://${serverHost}/bridge`;
 
   return (
     <div className="max-w-3xl">

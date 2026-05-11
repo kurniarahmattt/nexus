@@ -54,7 +54,6 @@ export default function BridgeNew() {
 
   if (result) {
     const serverHost = window.location.host;
-    const serverHostname = serverHost.split(":")[0];
     const exportCmd = `# 1. Install Bun (once, on user's PC):
 curl -fsSL https://bun.sh/install | bash
 
@@ -66,7 +65,7 @@ curl -O http://${serverHost}/admin/download/nexus-bridge.js
 NEXUS_BRIDGE_TOKEN=${result.bridge_token} \\
   bun nexus-bridge.js \\
     --config ./${result.slug}.json \\
-    --server ws://${serverHostname}:4000/bridge`;
+    --server ws://${serverHost}/bridge`;
     return (
       <div className="max-w-2xl space-y-4">
         <h2 className="text-xl font-semibold">Bridge created: @{result.slug}</h2>
