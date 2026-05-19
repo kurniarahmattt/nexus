@@ -1,6 +1,6 @@
 .PHONY: help setup up down restart logs ps health psql redis-cli mongo-shell \
         bootstrap dev-gateway dev-composer dev-runtime dev-services install \
-        clean nuke
+        clean nuke e2e e2e-rebuild
 
 SHELL := /bin/bash
 DC    := docker compose
@@ -208,3 +208,10 @@ clean: ## Stop services and remove containers (keep volumes)
 nuke: ## DESTRUCTIVE: drop all containers AND volumes (data loss!)
 	@read -p "This will DELETE all data (Mongo, Postgres, Redis, uploads). Type 'yes' to continue: " confirm && \
 	  [ "$$confirm" = "yes" ] && $(DC) down -v --remove-orphans || echo "Aborted."
+
+# ---- End-to-end test ----
+e2e: ## Run the full fresh-install e2e in an isolated DinD container
+	@bash test/e2e/run.sh
+
+e2e-rebuild: ## Same as `make e2e` but force-rebuilds the harness image
+	@bash test/e2e/run.sh --rebuild

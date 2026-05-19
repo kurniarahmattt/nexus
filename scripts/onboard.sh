@@ -28,6 +28,54 @@ cd "$REPO_ROOT"
 
 TOTAL_STEPS=7
 
+# ---- unattended mode --------------------------------------------------------
+# Set NEXUS_UNATTENDED=1 to suppress every interactive prompt. Useful for
+# CI smoke tests and for the e2e test container. All prompts will accept
+# their default answer (regen=no, relocate-port=yes, llm-key=skip unless
+# set via NEXUS_LLM_API_KEY, etc.).
+#
+# Required env vars in unattended mode:
+#   NEXUS_WORKSPACE_ROOT_PROMPT  — absolute path (e.g. /tmp/coding)
+# Optional:
+#   NEXUS_REGEN_ENV=1            — overwrite existing .env (default: keep)
+#   NEXUS_LLM_API_KEY            — Mem0 LLM key (default: leave placeholder)
+#   NEXUS_UNATTENDED_RELOCATE=1  — auto-accept port relocations (default: yes)
+UNATTENDED="${NEXUS_UNATTENDED:-0}"
+
+ask_or_default() {
+  # ask_or_default <prompt> <default>
+  # In interactive mode: shows prompt, returns user's input or default.
+  # In unattended mode:  returns default without prompting.
+  # IMPORTANT: all human-readable output goes to STDERR so that the
+  # caller's `$(ask_or_default ...)` captures the bare value via stdout.
+  local prompt="$1" default="${2:-}"
+  if [ "$UNATTENDED" = "1" ]; then
+    printf '  %s [%s] (unattended)\n' "$prompt" "$default" >&2
+    printf '%s' "$default"
+    return
+  fi
+  ask "$prompt [${default}]" >&2
+  local ans
+  read -r ans
+  printf '%s' "${ans:-$default}"
+}
+
+confirm_or_default() {
+  # confirm_or_default <prompt> <default_yes|default_no>
+  # Returns "y" or "n" — see ask_or_default for the stdout/stderr split.
+  local prompt="$1" default="$2"
+  if [ "$UNATTENDED" = "1" ]; then
+    printf '  %s [%s] (unattended)\n' "$prompt" "$default" >&2
+    printf '%s' "$default"
+    return
+  fi
+  ask "$prompt [$([ "$default" = "y" ] && echo "Y/n" || echo "y/N")]" >&2
+  local ans
+  read -r ans
+  ans="${ans:-$default}"
+  case "$ans" in y|Y|yes|YES) printf 'y' ;; *) printf 'n' ;; esac
+}
+
 # ---- header -----------------------------------------------------------------
 
 cat <<EOF
@@ -111,11 +159,13 @@ step 2 "Configuring .env"
 
 if [ -f .env ]; then
   warn ".env already exists"
-  ask "Regenerate? Existing values will be overwritten. [y/N]"
-  read -r ans
-  case "${ans:-N}" in
-    y|Y|yes|YES) info "regenerating .env from template"; cp .env.example .env ;;
-    *)           ok "keeping existing .env"; ;;
+  # In unattended mode, default is N (preserve), override with NEXUS_REGEN_ENV=1.
+  default_regen="n"
+  [ "${NEXUS_REGEN_ENV:-0}" = "1" ] && default_regen="y"
+  ans=$(confirm_or_default "Regenerate? Existing values will be overwritten." "$default_regen")
+  case "$ans" in
+    y) info "regenerating .env from template"; cp .env.example .env ;;
+    *) ok "keeping existing .env" ;;
   esac
 else
   cp .env.example .env
@@ -161,9 +211,9 @@ case "$existing_ws" in
   /path/to/*|"")  ws_prompt="$default_ws" ;;
   *)              ws_prompt="$existing_ws" ;;
 esac
-ask "Where is the parent dir of your projects? [${ws_prompt}]"
-read -r ws
-ws="${ws:-$ws_prompt}"
+# Unattended override: NEXUS_WORKSPACE_ROOT_PROMPT overrides default.
+[ -n "${NEXUS_WORKSPACE_ROOT_PROMPT:-}" ] && ws_prompt="$NEXUS_WORKSPACE_ROOT_PROMPT"
+ws=$(ask_or_default "Where is the parent dir of your projects?" "$ws_prompt")
 case "$ws" in
   /*) ;;
   *)  err "must be absolute. Got: $ws"; exit 1 ;;
@@ -212,8 +262,15 @@ ok "DATABASE_URL updated"
 existing_llm_key="$(current_env MEM0_LLM_API_KEY)"
 case "$existing_llm_key" in
   sk-replace-me|"")
-    ask "OpenAI/Anthropic API key for Mem0 (or 'skip'; can edit .env later):"
-    read -r llm_key
+    # Unattended override via NEXUS_LLM_API_KEY (or omit to skip).
+    if [ "$UNATTENDED" = "1" ]; then
+      llm_key="${NEXUS_LLM_API_KEY:-skip}"
+      printf '  %s [%s] (unattended)\n' "OpenAI/Anthropic API key for Mem0 (or 'skip')" \
+        "$([ "$llm_key" = "skip" ] && echo "skip" || echo "***provided***")"
+    else
+      ask "OpenAI/Anthropic API key for Mem0 (or 'skip'; can edit .env later):"
+      read -r llm_key
+    fi
     case "${llm_key:-skip}" in
       skip|SKIP|"") warn "Mem0 will use the placeholder key — semantic recall won't work until you set MEM0_LLM_API_KEY in .env" ;;
       *)            set_env MEM0_LLM_API_KEY "$llm_key"; ok "MEM0_LLM_API_KEY set" ;;
@@ -274,10 +331,9 @@ for key in "${PORT_KEYS[@]}"; do
   if port_in_use "$cur"; then
     suggested="$(find_free_port $((cur + ${PORT_STEP[$key]})) ${PORT_STEP[$key]})"
     warn "$label port $cur is in use by another process"
-    ask "Move Nexus's $label to $suggested instead? [Y/n]"
-    read -r ans
-    case "${ans:-Y}" in
-      n|N|no|NO)
+    ans=$(confirm_or_default "Move Nexus's $label to $suggested instead?" "y")
+    case "$ans" in
+      n)
         err "cannot continue while $cur is taken; free it manually and re-run."
         exit 1
         ;;
@@ -442,16 +498,20 @@ ${C_GREEN}${C_BOLD}✓ Nexus is up.${C_RESET}
   ${C_BOLD}Next steps:${C_RESET}
   • Open ${C_CYAN}http://localhost:${rc_port}${C_RESET}
     Admin login printed in the bootstrap output above.
-  • Test:  in the #nexus-test channel, type ${C_CYAN}@claude hello${C_RESET}
   • Status anytime:  ${C_CYAN}make health${C_RESET} / ${C_CYAN}make services-status${C_RESET}
   • Logs:  ${C_CYAN}make logs${C_RESET}
 
-  ${C_BOLD}Onboard a teammate's AI (issue an invite URL):${C_RESET}
-    make issue-invite USER=<their-username> CHANNELS=<channel-name>
+  ${C_BOLD}Create your first bot (this also creates the bridge for whoever
+  will run the CLI on their laptop — could be you on this same machine):${C_RESET}
 
-  Point them at:
-    https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge
+    ${C_CYAN}make issue-invite USER=<your-username> CLI=claude CHANNELS=nexus-test${C_RESET}
 
+  The output prints an invite URL. Run it on the laptop where the CLI
+  lives (could be this machine if you're the dev too):
+
+    ${C_CYAN}nexus onboard <invite-url>${C_RESET}
+
+  Docs: https://kurniarahmattt.github.io/nexus/guide/quick-start-bridge
   Your gateway URL:  ws://<this-host>:${gw_port}/bridge
 
 EOF

@@ -1,24 +1,22 @@
 -- ============================================================================
 -- N.E.X.U.S — Seed Data
 -- ============================================================================
--- Agents v1: claude + hermes
--- rocketchat_bot_id is populated by scripts/bootstrap-rocketchat.sh
+-- Intentionally left blank in the public release. Default agents
+-- (claude/hermes/cursor/gemini) used to be auto-inserted here and in
+-- 0004, but that locked every fresh install into "the team has these
+-- four bots" — even when the operator had only one of the CLIs
+-- installed. New default: no agents at install time. The operator
+-- creates each bridge explicitly via:
+--
+--   make issue-invite USER=<name> CLI=<kind> CHANNELS=<...>
+--
+-- Existing installs with the old seeds are NOT affected — schema
+-- migrations only run once (tracked in schema_migrations table). To
+-- disable the old bots on an existing install:
+--
+--   UPDATE agents SET enabled = false WHERE kind = 'local';
+--
+-- Or delete them entirely once you're sure no transcripts reference them.
 -- ============================================================================
-
-INSERT INTO agents (slug, display_name, cli_command, cli_args, rocketchat_username, config, enabled)
-VALUES
-  ('claude', 'Claude Code', 'claude', '[]'::jsonb,
-   'claude',
-   '{"description":"Anthropic Claude Code CLI agent","model":"claude-sonnet-4-6"}'::jsonb,
-   true),
-  ('hermes', 'Hermes Agent', 'hermes', '[]'::jsonb,
-   'hermes',
-   '{"description":"Nous Research Hermes autonomous agent","model":"hermes-3"}'::jsonb,
-   true)
-ON CONFLICT (slug) DO UPDATE SET
-  display_name = EXCLUDED.display_name,
-  cli_command  = EXCLUDED.cli_command,
-  config       = EXCLUDED.config,
-  updated_at   = now();
 
 INSERT INTO schema_migrations (version) VALUES ('0002_seed') ON CONFLICT DO NOTHING;

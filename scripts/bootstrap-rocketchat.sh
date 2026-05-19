@@ -154,32 +154,45 @@ EOF
   echo "$bot_id"
 }
 
-# ---- Create bots: @claude, @hermes, @cursor, @gemini ----
-CLAUDE_BOT_ID=$(create_bot "claude" "Claude Code"  "${RC_BOT_CLAUDE_PASSWORD:-nexus_bot_claude}")
-HERMES_BOT_ID=$(create_bot "hermes" "Hermes Agent" "${RC_BOT_HERMES_PASSWORD:-nexus_bot_hermes}")
-CURSOR_BOT_ID=$(create_bot "cursor" "Cursor Agent" "${RC_BOT_CURSOR_PASSWORD:-nexus_bot_cursor}")
-GEMINI_BOT_ID=$(create_bot "gemini" "Gemini CLI"   "${RC_BOT_GEMINI_PASSWORD:-nexus_bot_gemini}")
+# ---- Default agents removed in public release ----
+# Earlier versions auto-created @claude, @hermes, @cursor, @gemini bots
+# here so a fresh install had something to test mentions against. That
+# locked every operator into having those four CLIs installed and
+# authenticated. Now: no default bots — the operator creates each one
+# explicitly with \`make issue-invite\`. The first bridge they spin up
+# becomes the first bot.
+#
+# Set NEXUS_SEED_DEFAULT_AGENTS=1 to opt back in to the old behavior
+# (also requires the bot users + agents-table rows to be present —
+# typically only true on existing installs that ran the old bootstrap
+# before this change).
+SEED_DEFAULT_AGENTS="${NEXUS_SEED_DEFAULT_AGENTS:-0}"
 
-log "claude bot rocketchat_id = ${CLAUDE_BOT_ID}"
-log "hermes bot rocketchat_id = ${HERMES_BOT_ID}"
-log "cursor bot rocketchat_id = ${CURSOR_BOT_ID}"
-log "gemini bot rocketchat_id = ${GEMINI_BOT_ID}"
+if [ "$SEED_DEFAULT_AGENTS" = "1" ]; then
+  log "Creating default bots (claude, hermes, cursor, gemini)..."
+  CLAUDE_BOT_ID=$(create_bot "claude" "Claude Code"  "${RC_BOT_CLAUDE_PASSWORD:-nexus_bot_claude}")
+  HERMES_BOT_ID=$(create_bot "hermes" "Hermes Agent" "${RC_BOT_HERMES_PASSWORD:-nexus_bot_hermes}")
+  CURSOR_BOT_ID=$(create_bot "cursor" "Cursor Agent" "${RC_BOT_CURSOR_PASSWORD:-nexus_bot_cursor}")
+  GEMINI_BOT_ID=$(create_bot "gemini" "Gemini CLI"   "${RC_BOT_GEMINI_PASSWORD:-nexus_bot_gemini}")
 
-# ---- Write bot ids back to Postgres ----
-log "Updating agents.rocketchat_bot_id in Postgres..."
-docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 <<SQL
-UPDATE agents SET rocketchat_bot_id = '${CLAUDE_BOT_ID}', updated_at = now()
-  WHERE slug = 'claude';
-UPDATE agents SET rocketchat_bot_id = '${HERMES_BOT_ID}', updated_at = now()
-  WHERE slug = 'hermes';
-UPDATE agents SET rocketchat_bot_id = '${CURSOR_BOT_ID}', updated_at = now()
-  WHERE slug = 'cursor';
-UPDATE agents SET rocketchat_bot_id = '${GEMINI_BOT_ID}', updated_at = now()
-  WHERE slug = 'gemini';
+  log "claude bot rocketchat_id = ${CLAUDE_BOT_ID}"
+  log "hermes bot rocketchat_id = ${HERMES_BOT_ID}"
+  log "cursor bot rocketchat_id = ${CURSOR_BOT_ID}"
+  log "gemini bot rocketchat_id = ${GEMINI_BOT_ID}"
+
+  log "Updating agents.rocketchat_bot_id in Postgres..."
+  docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 <<SQL
+UPDATE agents SET rocketchat_bot_id = '${CLAUDE_BOT_ID}', updated_at = now() WHERE slug = 'claude';
+UPDATE agents SET rocketchat_bot_id = '${HERMES_BOT_ID}', updated_at = now() WHERE slug = 'hermes';
+UPDATE agents SET rocketchat_bot_id = '${CURSOR_BOT_ID}', updated_at = now() WHERE slug = 'cursor';
+UPDATE agents SET rocketchat_bot_id = '${GEMINI_BOT_ID}', updated_at = now() WHERE slug = 'gemini';
 SELECT slug, rocketchat_username, rocketchat_bot_id FROM agents ORDER BY slug;
 SQL
+else
+  log "Skipping default bot creation (set NEXUS_SEED_DEFAULT_AGENTS=1 to re-enable)."
+fi
 
-# ---- Create test channel #nexus-test ----
+# ---- Create test channel #nexus-test (empty by default) ----
 ROOM_NAME="${NEXUS_TEST_ROOM:-nexus-test}"
 log "Ensuring test channel #${ROOM_NAME} exists..."
 existing=$(curl -sfS "${AUTH_HDR[@]}" \
@@ -189,77 +202,71 @@ existing=$(curl -sfS "${AUTH_HDR[@]}" \
 if [ "$existing" = "true" ]; then
   log "Channel #${ROOM_NAME} already exists."
 else
-  body=$(cat <<EOF
-{
-  "name": "${ROOM_NAME}",
-  "members": ["claude","hermes"]
-}
-EOF
-)
+  if [ "$SEED_DEFAULT_AGENTS" = "1" ]; then
+    body='{"name":"'${ROOM_NAME}'","members":["claude","hermes"]}'
+  else
+    body='{"name":"'${ROOM_NAME}'"}'
+  fi
   curl -sfS -X POST "${AUTH_HDR[@]}" \
     -H "Content-Type: application/json" \
     -d "$body" \
     "${RC_URL}/api/v1/channels.create" > /dev/null \
     || die "Failed to create test channel."
-  log "Channel #${ROOM_NAME} created with @claude + @hermes invited."
+  log "Channel #${ROOM_NAME} created (empty — invite bots via \`make invite-bot\`)."
 fi
 
-# ---- Login bots, persist authTokens to Postgres.agents.config ----
-bot_login() {
-  local username="$1"
-  local password="$2"
-  local resp
-  resp=$(curl -sfS -X POST "${RC_URL}/api/v1/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"user\":\"${username}\",\"password\":\"${password}\"}")
-  local tok uid
-  tok=$(echo "$resp" | grep -oP '"authToken"\s*:\s*"\K[^"]+')
-  uid=$(echo "$resp" | grep -oP '"userId"\s*:\s*"\K[^"]+')
-  [ -n "$tok" ] && [ -n "$uid" ] || die "Failed to login bot @${username}"
-  echo "${tok}|${uid}"
-}
+# ---- Login default bots + persist authTokens (only when SEED_DEFAULT_AGENTS=1) ----
+if [ "$SEED_DEFAULT_AGENTS" = "1" ]; then
+  bot_login() {
+    local username="$1"
+    local password="$2"
+    local resp
+    resp=$(curl -sfS -X POST "${RC_URL}/api/v1/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"user\":\"${username}\",\"password\":\"${password}\"}")
+    local tok uid
+    tok=$(echo "$resp" | grep -oP '"authToken"\s*:\s*"\K[^"]+')
+    uid=$(echo "$resp" | grep -oP '"userId"\s*:\s*"\K[^"]+')
+    [ -n "$tok" ] && [ -n "$uid" ] || die "Failed to login bot @${username}"
+    echo "${tok}|${uid}"
+  }
 
-# Strip any email/TOTP 2FA flags that may have been attached to bot users by RC
-# defaults. Dev-only — we want bots to log in with plain username+password.
-log "Clearing 2FA flags on bot users..."
-docker exec "${MONGO_CONTAINER}" mongosh rocketchat --quiet --eval '
-  const r = db.users.updateMany(
-    { username: { $in: ["claude", "hermes", "cursor", "gemini"] } },
-    { $unset: {
-        "services.email2fa": "",
-        "services.totp": "",
-        "services.emailCode": ""
-    } }
-  );
-  print("  bots patched: " + r.modifiedCount);
-' 2>&1 | sed "s/^/  /"
+  log "Clearing 2FA flags on default bot users..."
+  docker exec "${MONGO_CONTAINER}" mongosh rocketchat --quiet --eval '
+    const r = db.users.updateMany(
+      { username: { $in: ["claude", "hermes", "cursor", "gemini"] } },
+      { $unset: {
+          "services.email2fa": "",
+          "services.totp": "",
+          "services.emailCode": ""
+      } }
+    );
+    print("  bots patched: " + r.modifiedCount);
+  ' 2>&1 | sed "s/^/  /"
 
-log "Logging in bots to capture authTokens..."
-CLAUDE_CRED=$(bot_login "claude" "${RC_BOT_CLAUDE_PASSWORD:-nexus_bot_claude}")
-HERMES_CRED=$(bot_login "hermes" "${RC_BOT_HERMES_PASSWORD:-nexus_bot_hermes}")
-CURSOR_CRED=$(bot_login "cursor" "${RC_BOT_CURSOR_PASSWORD:-nexus_bot_cursor}")
-GEMINI_CRED=$(bot_login "gemini" "${RC_BOT_GEMINI_PASSWORD:-nexus_bot_gemini}")
+  log "Logging in default bots to capture authTokens..."
+  CLAUDE_CRED=$(bot_login "claude" "${RC_BOT_CLAUDE_PASSWORD:-nexus_bot_claude}")
+  HERMES_CRED=$(bot_login "hermes" "${RC_BOT_HERMES_PASSWORD:-nexus_bot_hermes}")
+  CURSOR_CRED=$(bot_login "cursor" "${RC_BOT_CURSOR_PASSWORD:-nexus_bot_cursor}")
+  GEMINI_CRED=$(bot_login "gemini" "${RC_BOT_GEMINI_PASSWORD:-nexus_bot_gemini}")
 
-CLAUDE_TOKEN=${CLAUDE_CRED%|*}; CLAUDE_UID=${CLAUDE_CRED#*|}
-HERMES_TOKEN=${HERMES_CRED%|*}; HERMES_UID=${HERMES_CRED#*|}
-CURSOR_TOKEN=${CURSOR_CRED%|*}; CURSOR_UID=${CURSOR_CRED#*|}
-GEMINI_TOKEN=${GEMINI_CRED%|*}; GEMINI_UID=${GEMINI_CRED#*|}
+  CLAUDE_TOKEN=${CLAUDE_CRED%|*}; CLAUDE_UID=${CLAUDE_CRED#*|}
+  HERMES_TOKEN=${HERMES_CRED%|*}; HERMES_UID=${HERMES_CRED#*|}
+  CURSOR_TOKEN=${CURSOR_CRED%|*}; CURSOR_UID=${CURSOR_CRED#*|}
+  GEMINI_TOKEN=${GEMINI_CRED%|*}; GEMINI_UID=${GEMINI_CRED#*|}
 
-log "Persisting bot credentials to Postgres agents.config..."
-docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 <<SQL
+  log "Persisting default bot credentials to Postgres agents.config..."
+  docker exec -i "${PG_CONTAINER}" psql -U "${PGUSER}" -d "${PGDB}" -v ON_ERROR_STOP=1 <<SQL
 UPDATE agents SET config = config || jsonb_build_object(
-  'auth_token','${CLAUDE_TOKEN}','auth_user_id','${CLAUDE_UID}'), updated_at=now()
-  WHERE slug='claude';
+  'auth_token','${CLAUDE_TOKEN}','auth_user_id','${CLAUDE_UID}'), updated_at=now() WHERE slug='claude';
 UPDATE agents SET config = config || jsonb_build_object(
-  'auth_token','${HERMES_TOKEN}','auth_user_id','${HERMES_UID}'), updated_at=now()
-  WHERE slug='hermes';
+  'auth_token','${HERMES_TOKEN}','auth_user_id','${HERMES_UID}'), updated_at=now() WHERE slug='hermes';
 UPDATE agents SET config = config || jsonb_build_object(
-  'auth_token','${CURSOR_TOKEN}','auth_user_id','${CURSOR_UID}'), updated_at=now()
-  WHERE slug='cursor';
+  'auth_token','${CURSOR_TOKEN}','auth_user_id','${CURSOR_UID}'), updated_at=now() WHERE slug='cursor';
 UPDATE agents SET config = config || jsonb_build_object(
-  'auth_token','${GEMINI_TOKEN}','auth_user_id','${GEMINI_UID}'), updated_at=now()
-  WHERE slug='gemini';
+  'auth_token','${GEMINI_TOKEN}','auth_user_id','${GEMINI_UID}'), updated_at=now() WHERE slug='gemini';
 SQL
+fi
 
 # ---- Outgoing webhook integration (RC → gateway) ----
 # RC 6.13 quirks:
@@ -275,6 +282,16 @@ WEBHOOK_TOKEN="${NEXUS_WEBHOOK_TOKEN:-nexus_webhook_dev_secret}"
 INTEGRATION_NAME="nexus-outgoing"
 
 # Build JSON body safely (jq not required; single-quoted heredoc).
+# Compute triggerWords: include the four legacy bot mentions only when
+# the default agents are seeded; otherwise start empty (each bridge
+# created via `make create-bridge` / `make issue-invite` adds its own
+# slug via `make invite-bot` or via the gateway's auto-trigger refresh).
+if [ "$SEED_DEFAULT_AGENTS" = "1" ]; then
+  TRIGGER_WORDS='["@claude","@hermes","@cursor","@gemini"]'
+else
+  TRIGGER_WORDS='[]'
+fi
+
 integration_body=$(cat <<JSON
 {
   "type":"webhook-outgoing",
@@ -283,7 +300,7 @@ integration_body=$(cat <<JSON
   "event":"sendMessage",
   "urls":["${GATEWAY_WEBHOOK_URL}"],
   "channel":"all_public_channels,all_private_groups,all_direct_messages",
-  "triggerWords":["@claude","@hermes","@cursor","@gemini"],
+  "triggerWords":${TRIGGER_WORDS},
   "username":"rocket.cat",
   "scriptEnabled":false,
   "script":"",
@@ -355,5 +372,10 @@ esac
 log ""
 log "Bootstrap complete."
 log "  → Open ${RC_URL} and login as ${RC_ADMIN_USER} / ${RC_ADMIN_PASS}"
-log "  → Test channel: #${ROOM_NAME}"
-log "  → Outgoing webhook: ${GATEWAY_WEBHOOK_URL} (trigger: @claude, @hermes)"
+log "  → Test channel: #${ROOM_NAME} (empty — invite bots via \`make invite-bot\`)"
+log "  → Outgoing webhook: ${GATEWAY_WEBHOOK_URL}"
+if [ "$SEED_DEFAULT_AGENTS" != "1" ]; then
+  log ""
+  log "  No default bots yet. Issue an invite to onboard your first one:"
+  log "    make issue-invite USER=<you> CLI=claude CHANNELS=${ROOM_NAME}"
+fi
